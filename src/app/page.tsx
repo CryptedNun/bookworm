@@ -24,13 +24,27 @@ export function AuthCard() {
   const [signupUsername, setSignupUsername] = useState("");
   const [signupPassword, setSignupPassword] = useState("");
   const [isLoading, setIsLoading] = useState(false);
+  const [dbStatus, setDbStatus] = useState<string | null>(null);
 
-  const handleSignIn = (e: React.FormEvent) => {
+  const handleSignIn = async (e: React.FormEvent) => {
     e.preventDefault();
     setIsLoading(true);
-    setTimeout(() => {
-      router.push("/dashboard");
-    }, 150);
+
+    try {
+      // Import dynamically to avoid server/client boundary issues
+      const { signIn } = await import('@/actions/auth');
+      const result = await signIn(usernameOrEmail, password);
+
+      if (result.success) {
+        router.push('/dashboard');
+      } else {
+        alert(result.error || 'Sign in failed');
+        setIsLoading(false);
+      }
+    } catch (error: any) {
+      alert('Sign in error: ' + error.message);
+      setIsLoading(false);
+    }
   };
 
   const handleSignUp = (e: React.FormEvent) => {
@@ -41,9 +55,62 @@ export function AuthCard() {
     }, 150);
   };
 
-  const handleQuickDemo = () => {
+  const handleQuickDemo = async () => {
     setIsLoading(true);
-    router.push("/dashboard");
+    
+    try {
+      const { signIn } = await import('@/actions/auth');
+      // Use alice's credentials for quick demo
+      const result = await signIn('alice@bookworm.dev', 'demo');
+      
+      if (result.success) {
+        router.push("/dashboard");
+      } else {
+        alert('Demo login failed: ' + result.error);
+        setIsLoading(false);
+      }
+    } catch (error: any) {
+      alert('Demo login error: ' + error.message);
+      setIsLoading(false);
+    }
+  };
+
+  const checkDatabase = async () => {
+    try {
+      const { verifyDatabase } = await import('@/actions/verify-db');
+      const result = await verifyDatabase();
+      
+      if (result.success && result.users) {
+        const status = `✅ Database Connected!\n\n` +
+          `Users: ${result.users.length}\n` +
+          result.users.map((u: any) => `  - ${u.username} (${u.email}) ${u.is_active ? '✓' : '✗'}`).join('\n') +
+          `\n\nNotebooks: ${result.notebooks_count}\n` +
+          `Notes: ${result.notes_count}`;
+        setDbStatus(status);
+        alert(status);
+      } else {
+        const status = `❌ Database Error:\n${result.error}`;
+        setDbStatus(status);
+        alert(status);
+      }
+    } catch (error: any) {
+      const status = `❌ Connection Error:\n${error.message}`;
+      setDbStatus(status);
+      alert(status);
+    }
+  };
+
+  const clearSession = async () => {
+    try {
+      const { signOut } = await import('@/actions/auth');
+      await signOut();
+      alert('✅ Session cleared! You can test login again.');
+    } catch (error: any) {
+      // If signOut fails, manually clear cookies
+      document.cookie = 'user_id=; expires=Thu, 01 Jan 1970 00:00:00 UTC; path=/;';
+      document.cookie = 'username=; expires=Thu, 01 Jan 1970 00:00:00 UTC; path=/;';
+      alert('✅ Session cleared! You can test login again.');
+    }
   };
 
   return (
@@ -183,6 +250,22 @@ export function AuthCard() {
               >
                 <Sparkles className="w-3.5 h-3.5 text-amber-400" />
                 Instant Demo Access (as @alice)
+              </button>
+
+              <button
+                type="button"
+                onClick={checkDatabase}
+                className="w-full py-2 px-4 rounded-xl bg-blue-900/30 hover:bg-blue-900/50 text-blue-300 font-medium text-xs border border-blue-700/40 transition-all flex items-center justify-center gap-2 cursor-pointer"
+              >
+                🔍 Verify Database Connection
+              </button>
+
+              <button
+                type="button"
+                onClick={clearSession}
+                className="w-full py-2 px-4 rounded-xl bg-amber-900/30 hover:bg-amber-900/50 text-amber-300 font-medium text-xs border border-amber-700/40 transition-all flex items-center justify-center gap-2 cursor-pointer"
+              >
+                🔄 Clear Session (Test Login Again)
               </button>
             </div>
           </form>

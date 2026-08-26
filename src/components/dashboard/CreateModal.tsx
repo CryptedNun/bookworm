@@ -17,15 +17,17 @@ import {
 interface CreateModalProps {
   isOpen: boolean;
   initialType: "notebook" | "note" | "issue" | "branch" | "fork";
+  notebooks?: Array<{ notebook_id: string; title: string; }>;
   onClose: () => void;
   onSuccess: (message: string) => void;
 }
 
-export function CreateModal({ isOpen, initialType, onClose, onSuccess }: CreateModalProps) {
+export function CreateModal({ isOpen, initialType, notebooks = [], onClose, onSuccess }: CreateModalProps) {
   const [activeType, setActiveType] = useState<"notebook" | "note" | "issue" | "branch" | "fork">(initialType);
   const [title, setTitle] = useState("");
   const [description, setDescription] = useState("");
   const [visibility, setVisibility] = useState<"PUBLIC" | "PRIVATE" | "UNLISTED">("PUBLIC");
+  const [selectedNotebook, setSelectedNotebook] = useState<string>("");
   const [targetSlot, setTargetSlot] = useState("Slot #42 (Paragraph: AVL double rotation)");
   const [assignee, setAssignee] = useState("@alice");
 
@@ -153,6 +155,33 @@ export function CreateModal({ isOpen, initialType, onClose, onSuccess }: CreateM
               className="w-full px-3 py-2 rounded-lg bg-zinc-950 border border-zinc-800 text-zinc-100 placeholder-zinc-500 focus:outline-none focus:border-emerald-500/50"
             />
           </div>
+
+          {/* Notebook Selector for Notes */}
+          {activeType === "note" && (
+            <div>
+              <label className="block text-zinc-300 font-semibold mb-1">
+                Select Notebook
+              </label>
+              <select
+                required
+                value={selectedNotebook}
+                onChange={(e) => setSelectedNotebook(e.target.value)}
+                className="w-full px-3 py-2 rounded-lg bg-zinc-950 border border-zinc-800 text-zinc-100 focus:outline-none focus:border-emerald-500/50"
+              >
+                <option value="">Choose a notebook...</option>
+                {notebooks.map((notebook) => (
+                  <option key={notebook.notebook_id} value={notebook.notebook_id}>
+                    {notebook.title}
+                  </option>
+                ))}
+              </select>
+              {notebooks.length === 0 && (
+                <p className="mt-1 text-xs text-amber-400">
+                  No notebooks available. Create a notebook first.
+                </p>
+              )}
+            </div>
+          )}
 
           {activeType === "issue" && (
             <div className="space-y-3 p-3.5 rounded-xl bg-amber-950/20 border border-amber-500/20">

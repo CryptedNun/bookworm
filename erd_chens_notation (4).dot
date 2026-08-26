@@ -1,0 +1,276 @@
+digraph NoteHub_ERD {
+  graph [rankdir=LR, splines=true, overlap=false, nodesep=0.5, ranksep=1.5, newrank=true,
+         fontname="Helvetica", bgcolor="#FCFCFB", pad=0.5,
+         label=<<B>NoteHub — Entity-Relationship Diagram</B><BR/><FONT POINT-SIZE="10.5" COLOR="#666666">Chen Notation, reviewed &amp; corrected</FONT>>,
+         labelloc=t, fontsize=21];
+  node [fontname="Helvetica"]; edge [fontname="Helvetica"];
+
+  subgraph cluster_area1 {
+    style=invis; margin=6;
+    U [shape=box, style="filled,rounded", peripheries=1, fillcolor="#FFE8C2", color="#B9770E", penwidth=1.8, fontname="Helvetica-Bold", fontsize=12, margin=0.15, label="USERS"];
+    RS [shape=box, style="filled,rounded", peripheries=1, fillcolor="#FFE8C2", color="#B9770E", penwidth=1.8, fontname="Helvetica-Bold", fontsize=12, margin=0.15, label="RESOURCES"];
+    CR [shape=box, style="filled,rounded", peripheries=1, fillcolor="#FFE8C2", color="#B9770E", penwidth=1.8, fontname="Helvetica-Bold", fontsize=12, margin=0.15, label="COLLABORATOR_\nROLES"];
+    AR [shape=box, style="filled,rounded", peripheries=1, fillcolor="#FFE8C2", color="#B9770E", penwidth=1.8, fontname="Helvetica-Bold", fontsize=12, margin=0.15, label="ACCESS_\nREQUESTS"];
+    U_a0 [shape=ellipse, style="filled", fillcolor="#FDFDFD", color="#B9770E80", fontsize=8.5, fontcolor="#333333", penwidth=0.7, height=0.26, margin=0.04, label=<<U>user_id</U>>];
+    U -> U_a0 [arrowhead=none, color="#BBBBBB", penwidth=0.6];
+    U_a1 [shape=ellipse, style="filled", fillcolor="#FDFDFD", color="#B9770E80", fontsize=8.5, fontcolor="#333333", penwidth=0.7, height=0.26, margin=0.04, label="email"];
+    U -> U_a1 [arrowhead=none, color="#BBBBBB", penwidth=0.6];
+    U_a2 [shape=ellipse, style="filled", fillcolor="#FDFDFD", color="#B9770E80", fontsize=8.5, fontcolor="#333333", penwidth=0.7, height=0.26, margin=0.04, label="username"];
+    U -> U_a2 [arrowhead=none, color="#BBBBBB", penwidth=0.6];
+    U_a3 [shape=ellipse, style="filled", fillcolor="#FDFDFD", color="#B9770E80", fontsize=8.5, fontcolor="#333333", penwidth=0.7, height=0.26, margin=0.04, label="avatar_url"];
+    U -> U_a3 [arrowhead=none, color="#BBBBBB", penwidth=0.6];
+    U_a4 [shape=ellipse, style="filled", fillcolor="#FDFDFD", color="#B9770E80", fontsize=8.5, fontcolor="#333333", penwidth=0.7, height=0.26, margin=0.04, label="created_at"];
+    U -> U_a4 [arrowhead=none, color="#BBBBBB", penwidth=0.6];
+    U_a5 [shape=ellipse, style="filled", fillcolor="#FDFDFD", color="#B9770E80", fontsize=8.5, fontcolor="#333333", penwidth=0.7, height=0.26, margin=0.04, label="is_active"];
+    U -> U_a5 [arrowhead=none, color="#BBBBBB", penwidth=0.6];
+    RS_a0 [shape=ellipse, style="filled", fillcolor="#FDFDFD", color="#B9770E80", fontsize=8.5, fontcolor="#333333", penwidth=0.7, height=0.26, margin=0.04, label=<<U>resource_id</U>>];
+    RS -> RS_a0 [arrowhead=none, color="#BBBBBB", penwidth=0.6];
+    RS_a1 [shape=ellipse, style="filled", fillcolor="#FDFDFD", color="#B9770E80", fontsize=8.5, fontcolor="#333333", penwidth=0.7, height=0.26, margin=0.04, label="resource_type"];
+    RS -> RS_a1 [arrowhead=none, color="#BBBBBB", penwidth=0.6];
+    RS_a2 [shape=ellipse, style="filled", fillcolor="#FDFDFD", color="#B9770E80", fontsize=8.5, fontcolor="#333333", penwidth=0.7, height=0.26, margin=0.04, label="created_at"];
+    RS -> RS_a2 [arrowhead=none, color="#BBBBBB", penwidth=0.6];
+    CR_a0 [shape=ellipse, style="filled", fillcolor="#FDFDFD", color="#B9770E80", fontsize=8.5, fontcolor="#333333", penwidth=0.7, height=0.26, margin=0.04, label=<<U>role_id</U>>];
+    CR -> CR_a0 [arrowhead=none, color="#BBBBBB", penwidth=0.6];
+    CR_a1 [shape=ellipse, style="filled", fillcolor="#FDFDFD", color="#B9770E80", fontsize=8.5, fontcolor="#333333", penwidth=0.7, height=0.26, margin=0.04, label="role_type"];
+    CR -> CR_a1 [arrowhead=none, color="#BBBBBB", penwidth=0.6];
+    CR_a2 [shape=ellipse, style="filled", fillcolor="#FDFDFD", color="#B9770E80", fontsize=8.5, fontcolor="#333333", penwidth=0.7, height=0.26, margin=0.04, label="capabilities"];
+    CR -> CR_a2 [arrowhead=none, color="#BBBBBB", penwidth=0.6];
+    AR_a0 [shape=ellipse, style="filled", fillcolor="#FDFDFD", color="#B9770E80", fontsize=8.5, fontcolor="#333333", penwidth=0.7, height=0.26, margin=0.04, label=<<U>request_id</U>>];
+    AR -> AR_a0 [arrowhead=none, color="#BBBBBB", penwidth=0.6];
+    AR_a1 [shape=ellipse, style="filled", fillcolor="#FDFDFD", color="#B9770E80", fontsize=8.5, fontcolor="#333333", penwidth=0.7, height=0.26, margin=0.04, label="requested_role"];
+    AR -> AR_a1 [arrowhead=none, color="#BBBBBB", penwidth=0.6];
+    AR_a2 [shape=ellipse, style="filled", fillcolor="#FDFDFD", color="#B9770E80", fontsize=8.5, fontcolor="#333333", penwidth=0.7, height=0.26, margin=0.04, label="direction"];
+    AR -> AR_a2 [arrowhead=none, color="#BBBBBB", penwidth=0.6];
+    AR_a3 [shape=ellipse, style="filled", fillcolor="#FDFDFD", color="#B9770E80", fontsize=8.5, fontcolor="#333333", penwidth=0.7, height=0.26, margin=0.04, label="status"];
+    AR -> AR_a3 [arrowhead=none, color="#BBBBBB", penwidth=0.6];
+    // intra-area relationships
+    R1 [shape=diamond, style=filled, fillcolor=white, color="#B9770E", penwidth=1.8, fontname="Helvetica-Bold", fontsize=10, margin=0.1, label="Holds Role"];
+    U -> R1 [arrowhead=vee, arrowsize=0.7, penwidth=1.0, label="1", fontsize=9, color="#444444"];
+    R1 -> CR [arrowhead=vee, arrowsize=0.7, penwidth=2.3, label="N", fontsize=9, color="#444444"];
+    R2 [shape=diamond, style=filled, fillcolor=white, color="#B9770E", penwidth=1.8, fontname="Helvetica-Bold", fontsize=10, margin=0.1, label="Granted By"];
+    U -> R2 [arrowhead=vee, arrowsize=0.7, penwidth=1.0, label="1", fontsize=9, color="#444444"];
+    R2 -> CR [arrowhead=vee, arrowsize=0.7, penwidth=2.3, label="N", fontsize=9, color="#444444"];
+    R3 [shape=diamond, style=filled, fillcolor=white, color="#B9770E", penwidth=1.8, fontname="Helvetica-Bold", fontsize=10, margin=0.1, label="Grants Access To"];
+    RS -> R3 [arrowhead=vee, arrowsize=0.7, penwidth=1.0, label="1", fontsize=9, color="#444444"];
+    R3 -> CR [arrowhead=vee, arrowsize=0.7, penwidth=2.3, label="N", fontsize=9, color="#444444"];
+    R4 [shape=diamond, style=filled, fillcolor=white, color="#B9770E", penwidth=1.8, fontname="Helvetica-Bold", fontsize=10, margin=0.1, label="Is Subject Of"];
+    U -> R4 [arrowhead=vee, arrowsize=0.7, penwidth=1.0, label="1", fontsize=9, color="#444444"];
+    R4 -> AR [arrowhead=vee, arrowsize=0.7, penwidth=2.3, label="N", fontsize=9, color="#444444"];
+    R5 [shape=diamond, style=filled, fillcolor=white, color="#B9770E", penwidth=1.8, fontname="Helvetica-Bold", fontsize=10, margin=0.1, label="Initiates"];
+    U -> R5 [arrowhead=vee, arrowsize=0.7, penwidth=1.0, label="1", fontsize=9, color="#444444"];
+    R5 -> AR [arrowhead=vee, arrowsize=0.7, penwidth=2.3, label="N", fontsize=9, color="#444444"];
+    R6 [shape=diamond, style=filled, fillcolor=white, color="#B9770E", penwidth=1.8, fontname="Helvetica-Bold", fontsize=10, margin=0.1, label="Reviews"];
+    U -> R6 [arrowhead=vee, arrowsize=0.7, penwidth=1.0, label="1", fontsize=9, color="#444444"];
+    R6 -> AR [arrowhead=vee, arrowsize=0.7, penwidth=1.0, label="N", fontsize=9, color="#444444"];
+    R7 [shape=diamond, style=filled, fillcolor=white, color="#B9770E", penwidth=1.8, fontname="Helvetica-Bold", fontsize=10, margin=0.1, label="Concerns"];
+    RS -> R7 [arrowhead=vee, arrowsize=0.7, penwidth=1.0, label="1", fontsize=9, color="#444444"];
+    R7 -> AR [arrowhead=vee, arrowsize=0.7, penwidth=2.3, label="N", fontsize=9, color="#444444"];
+  }
+
+  subgraph cluster_area2 {
+    style=invis; margin=6;
+    NB [shape=box, style="filled,rounded", peripheries=1, fillcolor="#CDE8FF", color="#1B5FA6", penwidth=1.8, fontname="Helvetica-Bold", fontsize=12, margin=0.15, label="NOTEBOOKS"];
+    NT [shape=box, style="filled,rounded", peripheries=1, fillcolor="#CDE8FF", color="#1B5FA6", penwidth=1.8, fontname="Helvetica-Bold", fontsize=12, margin=0.15, label="NOTES"];
+    ED [shape=box, style="filled,rounded", peripheries=1, fillcolor="#CDE8FF", color="#1B5FA6", penwidth=1.8, fontname="Helvetica-Bold", fontsize=12, margin=0.15, label="EDITIONS"];
+    BR [shape=box, style="filled,rounded", peripheries=1, fillcolor="#CDE8FF", color="#1B5FA6", penwidth=1.8, fontname="Helvetica-Bold", fontsize=12, margin=0.15, label="BRANCHES"];
+    NB_a0 [shape=ellipse, style="filled,dashed", fillcolor="#FDFDFD", color="#1B5FA680", fontsize=8.5, fontcolor="#333333", penwidth=0.7, height=0.34, margin=0.04, label=<<I>notebook_id</I><BR/><FONT POINT-SIZE="6.5">PK, inherited from RESOURCES</FONT>>];
+    NB -> NB_a0 [arrowhead=none, color="#BBBBBB", penwidth=0.6];
+    NB_a1 [shape=ellipse, style="filled", fillcolor="#FDFDFD", color="#1B5FA680", fontsize=8.5, fontcolor="#333333", penwidth=0.7, height=0.26, margin=0.04, label="title"];
+    NB -> NB_a1 [arrowhead=none, color="#BBBBBB", penwidth=0.6];
+    NB_a2 [shape=ellipse, style="filled", fillcolor="#FDFDFD", color="#1B5FA680", fontsize=8.5, fontcolor="#333333", penwidth=0.7, height=0.26, margin=0.04, label="description"];
+    NB -> NB_a2 [arrowhead=none, color="#BBBBBB", penwidth=0.6];
+    NB_a3 [shape=ellipse, style="filled", fillcolor="#FDFDFD", color="#1B5FA680", fontsize=8.5, fontcolor="#333333", penwidth=0.7, height=0.26, margin=0.04, label="visibility"];
+    NB -> NB_a3 [arrowhead=none, color="#BBBBBB", penwidth=0.6];
+    NT_a0 [shape=ellipse, style="filled,dashed", fillcolor="#FDFDFD", color="#1B5FA680", fontsize=8.5, fontcolor="#333333", penwidth=0.7, height=0.34, margin=0.04, label=<<I>note_id</I><BR/><FONT POINT-SIZE="6.5">PK, inherited from RESOURCES</FONT>>];
+    NT -> NT_a0 [arrowhead=none, color="#BBBBBB", penwidth=0.6];
+    NT_a1 [shape=ellipse, style="filled", fillcolor="#FDFDFD", color="#1B5FA680", fontsize=8.5, fontcolor="#333333", penwidth=0.7, height=0.26, margin=0.04, label="title"];
+    NT -> NT_a1 [arrowhead=none, color="#BBBBBB", penwidth=0.6];
+    NT_a2 [shape=ellipse, style="filled", fillcolor="#FDFDFD", color="#1B5FA680", fontsize=8.5, fontcolor="#333333", penwidth=0.7, height=0.26, margin=0.04, label="display_order"];
+    NT -> NT_a2 [arrowhead=none, color="#BBBBBB", penwidth=0.6];
+    NT_a3 [shape=ellipse, style="filled", fillcolor="#FDFDFD", color="#1B5FA680", fontsize=8.5, fontcolor="#333333", penwidth=0.7, height=0.26, margin=0.04, label="visibility"];
+    NT -> NT_a3 [arrowhead=none, color="#BBBBBB", penwidth=0.6];
+    ED_a0 [shape=ellipse, style="filled", fillcolor="#FDFDFD", color="#1B5FA680", fontsize=8.5, fontcolor="#333333", penwidth=0.7, height=0.26, margin=0.04, label=<<U>edition_id</U>>];
+    ED -> ED_a0 [arrowhead=none, color="#BBBBBB", penwidth=0.6];
+    ED_a1 [shape=ellipse, style="filled", fillcolor="#FDFDFD", color="#1B5FA680", fontsize=8.5, fontcolor="#333333", penwidth=0.7, height=0.26, margin=0.04, label="edition_name"];
+    ED -> ED_a1 [arrowhead=none, color="#BBBBBB", penwidth=0.6];
+    ED_a2 [shape=ellipse, style="filled", fillcolor="#FDFDFD", color="#1B5FA680", fontsize=8.5, fontcolor="#333333", penwidth=0.7, height=0.26, margin=0.04, label="share_code"];
+    ED -> ED_a2 [arrowhead=none, color="#BBBBBB", penwidth=0.6];
+    ED_a3 [shape=ellipse, style="filled", fillcolor="#FDFDFD", color="#1B5FA680", fontsize=8.5, fontcolor="#333333", penwidth=0.7, height=0.26, margin=0.04, label="is_standard"];
+    ED -> ED_a3 [arrowhead=none, color="#BBBBBB", penwidth=0.6];
+    BR_a0 [shape=ellipse, style="filled", fillcolor="#FDFDFD", color="#1B5FA680", fontsize=8.5, fontcolor="#333333", penwidth=0.7, height=0.26, margin=0.04, label=<<U>branch_id</U>>];
+    BR -> BR_a0 [arrowhead=none, color="#BBBBBB", penwidth=0.6];
+    BR_a1 [shape=ellipse, style="filled", fillcolor="#FDFDFD", color="#1B5FA680", fontsize=8.5, fontcolor="#333333", penwidth=0.7, height=0.26, margin=0.04, label="branch_name"];
+    BR -> BR_a1 [arrowhead=none, color="#BBBBBB", penwidth=0.6];
+    BR_a2 [shape=ellipse, style="filled", fillcolor="#FDFDFD", color="#1B5FA680", fontsize=8.5, fontcolor="#333333", penwidth=0.7, height=0.26, margin=0.04, label="is_main"];
+    BR -> BR_a2 [arrowhead=none, color="#BBBBBB", penwidth=0.6];
+    BR_a3 [shape=ellipse, style="filled", fillcolor="#FDFDFD", color="#1B5FA680", fontsize=8.5, fontcolor="#333333", penwidth=0.7, height=0.26, margin=0.04, label="is_merged"];
+    BR -> BR_a3 [arrowhead=none, color="#BBBBBB", penwidth=0.6];
+    // intra-area relationships
+    R10 [shape=diamond, style=filled, fillcolor=white, color="#1B5FA6", penwidth=1.8, fontname="Helvetica-Bold", fontsize=10, margin=0.1, label="Contains"];
+    NB -> R10 [arrowhead=vee, arrowsize=0.7, penwidth=1.0, label="1", fontsize=9, color="#444444"];
+    R10 -> NT [arrowhead=vee, arrowsize=0.7, penwidth=2.3, label="N", fontsize=9, color="#444444"];
+    R11 [shape=diamond, style=filled, fillcolor=white, color="#1B5FA6", penwidth=1.8, fontname="Helvetica-Bold", fontsize=10, margin=0.1, label="Forked From"];
+    NT -> R11 [arrowhead=vee, arrowsize=0.7, penwidth=1.0, label="original\n1", fontsize=9, color="#444444"];
+    R11 -> NT [arrowhead=vee, arrowsize=0.7, penwidth=1.0, label="fork\nN", fontsize=9, color="#444444"];
+    R12 [shape=diamond, style=filled, fillcolor=white, color="#1B5FA6", penwidth=1.8, fontname="Helvetica-Bold", fontsize=10, margin=0.1, label="Has Editions"];
+    NT -> R12 [arrowhead=vee, arrowsize=0.7, penwidth=2.3, label="1", fontsize=9, color="#444444"];
+    R12 -> ED [arrowhead=vee, arrowsize=0.7, penwidth=2.3, label="N", fontsize=9, color="#444444"];
+    R13 [shape=diamond, style=filled, fillcolor=white, color="#1B5FA6", penwidth=1.8, fontname="Helvetica-Bold", fontsize=10, margin=0.1, label="Defaults To"];
+    NT -> R13 [arrowhead=vee, arrowsize=0.7, penwidth=1.0, label="1", fontsize=9, color="#444444"];
+    R13 -> ED [arrowhead=vee, arrowsize=0.7, penwidth=1.0, label="1", fontsize=9, color="#444444"];
+    R16 [shape=diamond, style=filled, fillcolor=white, color="#1B5FA6", penwidth=1.8, fontname="Helvetica-Bold", fontsize=10, margin=0.1, label="Has Branches"];
+    NT -> R16 [arrowhead=vee, arrowsize=0.7, penwidth=2.3, label="1", fontsize=9, color="#444444"];
+    R16 -> BR [arrowhead=vee, arrowsize=0.7, penwidth=2.3, label="N", fontsize=9, color="#444444"];
+  }
+
+  subgraph cluster_area3 {
+    style=invis; margin=6;
+    SL [shape=box, style="filled,rounded", peripheries=1, fillcolor="#D3F0D8", color="#2E7D32", penwidth=1.8, fontname="Helvetica-Bold", fontsize=12, margin=0.15, label="LOGICAL_BLOCK_\nSLOTS"];
+    BV [shape=box, style="filled,rounded", peripheries=1, fillcolor="#D3F0D8", color="#2E7D32", penwidth=1.8, fontname="Helvetica-Bold", fontsize=12, margin=0.15, label="BLOCK_VERSION_\nCONTENTS"];
+    CB [shape=box, style="filled,rounded", peripheries=1, fillcolor="#D3F0D8", color="#2E7D32", penwidth=1.8, fontname="Helvetica-Bold", fontsize=12, margin=0.15, label="CONTENT_BLOBS"];
+    SL_a0 [shape=ellipse, style="filled", fillcolor="#FDFDFD", color="#2E7D3280", fontsize=8.5, fontcolor="#333333", penwidth=0.7, height=0.26, margin=0.04, label=<<U>slot_id</U>>];
+    SL -> SL_a0 [arrowhead=none, color="#BBBBBB", penwidth=0.6];
+    SL_a1 [shape=ellipse, style="filled", fillcolor="#FDFDFD", color="#2E7D3280", fontsize=8.5, fontcolor="#333333", penwidth=0.7, height=0.26, margin=0.04, label="lexorank_key"];
+    SL -> SL_a1 [arrowhead=none, color="#BBBBBB", penwidth=0.6];
+    SL_a2 [shape=ellipse, style="filled", fillcolor="#FDFDFD", color="#2E7D3280", fontsize=8.5, fontcolor="#333333", penwidth=0.7, height=0.26, margin=0.04, label="block_type"];
+    SL -> SL_a2 [arrowhead=none, color="#BBBBBB", penwidth=0.6];
+    BV_a0 [shape=ellipse, style="filled", fillcolor="#FDFDFD", color="#2E7D3280", fontsize=8.5, fontcolor="#333333", penwidth=0.7, height=0.26, margin=0.04, label=<<U>version_id</U>>];
+    BV -> BV_a0 [arrowhead=none, color="#BBBBBB", penwidth=0.6];
+    BV_a1 [shape=ellipse, style="filled", fillcolor="#FDFDFD", color="#2E7D3280", fontsize=8.5, fontcolor="#333333", penwidth=0.7, height=0.26, margin=0.04, label="created_at"];
+    BV -> BV_a1 [arrowhead=none, color="#BBBBBB", penwidth=0.6];
+    CB_a0 [shape=ellipse, style="filled", fillcolor="#FDFDFD", color="#2E7D3280", fontsize=8.5, fontcolor="#333333", penwidth=0.7, height=0.26, margin=0.04, label=<<U>sha256</U>>];
+    CB -> CB_a0 [arrowhead=none, color="#BBBBBB", penwidth=0.6];
+    CB_a1 [shape=ellipse, style="filled", fillcolor="#FDFDFD", color="#2E7D3280", fontsize=8.5, fontcolor="#333333", penwidth=0.7, height=0.26, margin=0.04, label="content_text"];
+    CB -> CB_a1 [arrowhead=none, color="#BBBBBB", penwidth=0.6];
+    CB_a2 [shape=ellipse, style="filled", fillcolor="#FDFDFD", color="#2E7D3280", fontsize=8.5, fontcolor="#333333", penwidth=0.7, height=0.26, margin=0.04, label="byte_size"];
+    CB -> CB_a2 [arrowhead=none, color="#BBBBBB", penwidth=0.6];
+    CB_a3 [shape=ellipse, style="filled", fillcolor="#FDFDFD", color="#2E7D3280", fontsize=8.5, fontcolor="#333333", penwidth=0.7, height=0.26, margin=0.04, label="created_at"];
+    CB -> CB_a3 [arrowhead=none, color="#BBBBBB", penwidth=0.6];
+    // intra-area relationships
+    R19 [shape=diamond, style=filled, fillcolor=white, color="#2E7D32", penwidth=1.8, fontname="Helvetica-Bold", fontsize=10, margin=0.1, label="Nests Under"];
+    SL -> R19 [arrowhead=vee, arrowsize=0.7, penwidth=1.0, label="parent\n1", fontsize=9, color="#444444"];
+    R19 -> SL [arrowhead=vee, arrowsize=0.7, penwidth=1.0, label="child\nN", fontsize=9, color="#444444"];
+    R20 [shape=diamond, style=filled, fillcolor=white, color="#2E7D32", penwidth=1.8, fontname="Helvetica-Bold", fontsize=10, margin=0.1, label="Has History"];
+    SL -> R20 [arrowhead=vee, arrowsize=0.7, penwidth=2.3, label="1", fontsize=9, color="#444444"];
+    R20 -> BV [arrowhead=vee, arrowsize=0.7, penwidth=2.3, label="N", fontsize=9, color="#444444"];
+    R22 [shape=diamond, style=filled, fillcolor=white, color="#2E7D32", penwidth=1.8, fontname="Helvetica-Bold", fontsize=10, margin=0.1, label="Stores As"];
+    BV -> R22 [arrowhead=vee, arrowsize=0.7, penwidth=2.3, label="N", fontsize=9, color="#444444"];
+    R22 -> CB [arrowhead=vee, arrowsize=0.7, penwidth=2.3, label="1", fontsize=9, color="#444444"];
+  }
+
+  subgraph cluster_area4 {
+    style=invis; margin=6;
+    IS [shape=box, style="filled,rounded", peripheries=1, fillcolor="#EAD6F5", color="#7B1FA2", penwidth=1.8, fontname="Helvetica-Bold", fontsize=12, margin=0.15, label="ISSUES"];
+    IC [shape=box, style="filled,rounded", peripheries=2, fillcolor="#EAD6F5", color="#7B1FA2", penwidth=1.8, fontname="Helvetica-Bold", fontsize=12, margin=0.15, label="ISSUE_\nCONTRIBUTORS"];
+    IS_a0 [shape=ellipse, style="filled", fillcolor="#FDFDFD", color="#7B1FA280", fontsize=8.5, fontcolor="#333333", penwidth=0.7, height=0.26, margin=0.04, label=<<U>issue_id</U>>];
+    IS -> IS_a0 [arrowhead=none, color="#BBBBBB", penwidth=0.6];
+    IS_a1 [shape=ellipse, style="filled", fillcolor="#FDFDFD", color="#7B1FA280", fontsize=8.5, fontcolor="#333333", penwidth=0.7, height=0.26, margin=0.04, label="title"];
+    IS -> IS_a1 [arrowhead=none, color="#BBBBBB", penwidth=0.6];
+    IS_a2 [shape=ellipse, style="filled", fillcolor="#FDFDFD", color="#7B1FA280", fontsize=8.5, fontcolor="#333333", penwidth=0.7, height=0.26, margin=0.04, label="status"];
+    IS -> IS_a2 [arrowhead=none, color="#BBBBBB", penwidth=0.6];
+    IC_a0 [shape=ellipse, style="filled", fillcolor="#FDFDFD", color="#7B1FA280", fontsize=8.5, fontcolor="#333333", penwidth=0.7, height=0.26, margin=0.04, label="assigned_at"];
+    IC -> IC_a0 [arrowhead=none, color="#BBBBBB", penwidth=0.6];
+    // intra-area relationships
+    R26 [shape=diamond, style=filled, fillcolor=white, color="#7B1FA2", penwidth=1.8, fontname="Helvetica-Bold", fontsize=10, margin=0.1, label="Assigned Via"];
+    IS -> R26 [arrowhead=vee, arrowsize=0.7, penwidth=2.3, label="1", fontsize=9, color="#444444"];
+    R26 -> IC [arrowhead=vee, arrowsize=0.7, penwidth=2.3, label="N", fontsize=9, color="#444444"];
+  }
+
+  subgraph cluster_area5 {
+    style=invis; margin=6;
+    CO [shape=box, style="filled,rounded", peripheries=1, fillcolor="#FBD2D2", color="#B03A2E", penwidth=1.8, fontname="Helvetica-Bold", fontsize=12, margin=0.15, label="COMMITS"];
+    MF [shape=box, style="filled,rounded", peripheries=2, fillcolor="#FBD2D2", color="#B03A2E", penwidth=1.8, fontname="Helvetica-Bold", fontsize=12, margin=0.15, label="COMMIT_\nMANIFESTS"];
+    CO_a0 [shape=ellipse, style="filled", fillcolor="#FDFDFD", color="#B03A2E80", fontsize=8.5, fontcolor="#333333", penwidth=0.7, height=0.26, margin=0.04, label=<<U>commit_id</U>>];
+    CO -> CO_a0 [arrowhead=none, color="#BBBBBB", penwidth=0.6];
+    CO_a1 [shape=ellipse, style="filled", fillcolor="#FDFDFD", color="#B03A2E80", fontsize=8.5, fontcolor="#333333", penwidth=0.7, height=0.26, margin=0.04, label="commit_message"];
+    CO -> CO_a1 [arrowhead=none, color="#BBBBBB", penwidth=0.6];
+    CO_a2 [shape=ellipse, style="filled", fillcolor="#FDFDFD", color="#B03A2E80", fontsize=8.5, fontcolor="#333333", penwidth=0.7, height=0.26, margin=0.04, label="commit_hash"];
+    CO -> CO_a2 [arrowhead=none, color="#BBBBBB", penwidth=0.6];
+    CO_a3 [shape=ellipse, style="filled", fillcolor="#FDFDFD", color="#B03A2E80", fontsize=8.5, fontcolor="#333333", penwidth=0.7, height=0.26, margin=0.04, label="created_at"];
+    CO -> CO_a3 [arrowhead=none, color="#BBBBBB", penwidth=0.6];
+    MF_a0 [shape=ellipse, style="filled", fillcolor="#FDFDFD", color="#B03A2E80", fontsize=8.5, fontcolor="#333333", penwidth=0.7, height=0.26, margin=0.04, label=<<U>manifest_id</U>>];
+    MF -> MF_a0 [arrowhead=none, color="#BBBBBB", penwidth=0.6];
+    // intra-area relationships
+    R30 [shape=diamond, style=filled, fillcolor=white, color="#B03A2E", penwidth=1.8, fontname="Helvetica-Bold", fontsize=10, margin=0.1, label="Precedes"];
+    CO -> R30 [arrowhead=vee, arrowsize=0.7, penwidth=1.0, label="parent\n1", fontsize=9, color="#444444"];
+    R30 -> CO [arrowhead=vee, arrowsize=0.7, penwidth=1.0, label="child\nN", fontsize=9, color="#444444"];
+    RM1 [shape=diamond, style=filled, fillcolor=white, color="#B03A2E", penwidth=1.8, fontname="Helvetica-Bold", fontsize=10, margin=0.1, label="Recorded In"];
+    CO -> RM1 [arrowhead=vee, arrowsize=0.7, penwidth=2.3, label="1", fontsize=9, color="#444444"];
+    RM1 -> MF [arrowhead=vee, arrowsize=0.7, penwidth=2.3, label="N", fontsize=9, color="#444444"];
+  }
+
+  // ============================================================= CROSS-AREA RELATIONSHIPS
+  ISA [shape=triangle, label="d", fontsize=10, style=filled, fillcolor="#FFE8C2", color="#B9770E", width=0.5, height=0.4];
+    RS -> ISA [arrowhead=vee, arrowsize=0.7, penwidth=2.3, label="", fontsize=9, color="#444444"];
+    ISA -> NB [arrowhead=vee, arrowsize=0.7, penwidth=2.3, label="", fontsize=9, color="#444444"];
+    ISA -> NT [arrowhead=vee, arrowsize=0.7, penwidth=2.3, label="", fontsize=9, color="#444444"];
+    R9 [shape=diamond, style=filled, fillcolor=white, color="#B9770E", penwidth=1.8, fontname="Helvetica-Bold", fontsize=10, margin=0.1, label="Owns"];
+    U -> R9 [arrowhead=vee, arrowsize=0.7, penwidth=1.0, label="1", fontsize=9, color="#444444"];
+    R9 -> NB [arrowhead=vee, arrowsize=0.7, penwidth=2.3, label="N", fontsize=9, color="#444444"];
+    R14 [shape=diamond, style=filled, fillcolor=white, color="#1B5FA6", penwidth=1.8, fontname="Helvetica-Bold", fontsize=10, margin=0.1, label="Publishes"];
+    U -> R14 [arrowhead=vee, arrowsize=0.7, penwidth=1.0, label="1", fontsize=9, color="#444444"];
+    R14 -> ED [arrowhead=vee, arrowsize=0.7, penwidth=2.3, label="N", fontsize=9, color="#444444"];
+    R15 [shape=diamond, style=filled, fillcolor=white, color="#1B5FA6", penwidth=1.8, fontname="Helvetica-Bold", fontsize=10, margin=0.1, label="Pins"];
+    ED -> R15 [arrowhead=vee, arrowsize=0.7, penwidth=2.3, label="N", fontsize=9, color="#444444"];
+    R15 -> CO [arrowhead=vee, arrowsize=0.7, penwidth=1.0, label="1", fontsize=9, color="#444444"];
+    R17 [shape=diamond, style=filled, fillcolor=white, color="#1B5FA6", penwidth=1.8, fontname="Helvetica-Bold", fontsize=10, margin=0.1, label="Has Attempts"];
+    IS -> R17 [arrowhead=vee, arrowsize=0.7, penwidth=1.0, label="1", fontsize=9, color="#444444"];
+    R17 -> BR [arrowhead=vee, arrowsize=0.7, penwidth=1.0, label="N", fontsize=9, color="#444444"];
+    R17b [shape=diamond, style=filled, fillcolor=white, color="#1B5FA6", penwidth=1.8, fontname="Helvetica-Bold", fontsize=10, margin=0.1, label="Attempted By"];
+    BR -> R17b [arrowhead=vee, arrowsize=0.7, penwidth=2.3, label="N", fontsize=9, color="#444444"];
+    R17b -> U [arrowhead=vee, arrowsize=0.7, penwidth=1.0, label="1", fontsize=9, color="#444444"];
+    R18 [shape=diamond, style=filled, fillcolor=white, color="#2E7D32", penwidth=1.8, fontname="Helvetica-Bold", fontsize=10, margin=0.1, label="Structured By"];
+    NT -> R18 [arrowhead=vee, arrowsize=0.7, penwidth=2.3, label="1", fontsize=9, color="#444444"];
+    R18 -> SL [arrowhead=vee, arrowsize=0.7, penwidth=2.3, label="N", fontsize=9, color="#444444"];
+    R21 [shape=diamond, style=filled, fillcolor=white, color="#2E7D32", penwidth=1.8, fontname="Helvetica-Bold", fontsize=10, margin=0.1, label="Authors Version"];
+    U -> R21 [arrowhead=vee, arrowsize=0.7, penwidth=1.0, label="1", fontsize=9, color="#444444"];
+    R21 -> BV [arrowhead=vee, arrowsize=0.7, penwidth=2.3, label="N", fontsize=9, color="#444444"];
+    R23 [shape=diamond, style=filled, fillcolor=white, color="#7B1FA2", penwidth=1.8, fontname="Helvetica-Bold", fontsize=10, margin=0.1, label="Tracks"];
+    NT -> R23 [arrowhead=vee, arrowsize=0.7, penwidth=1.0, label="1", fontsize=9, color="#444444"];
+    R23 -> IS [arrowhead=vee, arrowsize=0.7, penwidth=2.3, label="N", fontsize=9, color="#444444"];
+    R24 [shape=diamond, style=filled, fillcolor=white, color="#7B1FA2", penwidth=1.8, fontname="Helvetica-Bold", fontsize=10, margin=0.1, label="Targeted By"];
+    SL -> R24 [arrowhead=vee, arrowsize=0.7, penwidth=1.0, label="1", fontsize=9, color="#444444"];
+    R24 -> IS [arrowhead=vee, arrowsize=0.7, penwidth=1.0, label="N", fontsize=9, color="#444444"];
+    R25 [shape=diamond, style=filled, fillcolor=white, color="#7B1FA2", penwidth=1.8, fontname="Helvetica-Bold", fontsize=10, margin=0.1, label="Files"];
+    U -> R25 [arrowhead=vee, arrowsize=0.7, penwidth=1.0, label="1", fontsize=9, color="#444444"];
+    R25 -> IS [arrowhead=vee, arrowsize=0.7, penwidth=2.3, label="N", fontsize=9, color="#444444"];
+    R27 [shape=diamond, style=filled, fillcolor=white, color="#7B1FA2", penwidth=1.8, fontname="Helvetica-Bold", fontsize=10, margin=0.1, label="Contributes To"];
+    U -> R27 [arrowhead=vee, arrowsize=0.7, penwidth=1.0, label="1", fontsize=9, color="#444444"];
+    R27 -> IC [arrowhead=vee, arrowsize=0.7, penwidth=2.3, label="N", fontsize=9, color="#444444"];
+    R28 [shape=diamond, style=filled, fillcolor=white, color="#7B1FA2", penwidth=1.8, fontname="Helvetica-Bold", fontsize=10, margin=0.1, label="Assigns"];
+    U -> R28 [arrowhead=vee, arrowsize=0.7, penwidth=1.0, label="1", fontsize=9, color="#444444"];
+    R28 -> IC [arrowhead=vee, arrowsize=0.7, penwidth=2.3, label="N", fontsize=9, color="#444444"];
+    R29 [shape=diamond, style=filled, fillcolor=white, color="#1B5FA6", penwidth=1.8, fontname="Helvetica-Bold", fontsize=10, margin=0.1, label="Has Commits"];
+    BR -> R29 [arrowhead=vee, arrowsize=0.7, penwidth=2.3, label="1", fontsize=9, color="#444444"];
+    R29 -> CO [arrowhead=vee, arrowsize=0.7, penwidth=2.3, label="N", fontsize=9, color="#444444"];
+    R31 [shape=diamond, style=filled, fillcolor=white, color="#B03A2E", penwidth=1.8, fontname="Helvetica-Bold", fontsize=10, margin=0.1, label="Authors Commit"];
+    U -> R31 [arrowhead=vee, arrowsize=0.7, penwidth=1.0, label="1", fontsize=9, color="#444444"];
+    R31 -> CO [arrowhead=vee, arrowsize=0.7, penwidth=2.3, label="N", fontsize=9, color="#444444"];
+    RM2 [shape=diamond, style=filled, fillcolor=white, color="#2E7D32", penwidth=1.8, fontname="Helvetica-Bold", fontsize=10, margin=0.1, label="Appears In"];
+    SL -> RM2 [arrowhead=vee, arrowsize=0.7, penwidth=2.3, label="1", fontsize=9, color="#444444"];
+    RM2 -> MF [arrowhead=vee, arrowsize=0.7, penwidth=2.3, label="N", fontsize=9, color="#444444"];
+    RM3 [shape=diamond, style=filled, fillcolor=white, color="#2E7D32", penwidth=1.8, fontname="Helvetica-Bold", fontsize=10, margin=0.1, label="Snapshotted As"];
+    BV -> RM3 [arrowhead=vee, arrowsize=0.7, penwidth=1.0, label="1", fontsize=9, color="#444444"];
+    RM3 -> MF [arrowhead=vee, arrowsize=0.7, penwidth=2.3, label="N", fontsize=9, color="#444444"];
+  RB [shape=diamond, style=filled, fillcolor="#EAD6F5", color="#7B1FA2", penwidth=2.2, fontname="Helvetica-Bold", fontsize=10.5, margin=0.12, label="Resolved By"];
+    IS -> RB [arrowhead=vee, arrowsize=0.7, penwidth=1.0, label="1", fontsize=9, color="#444444"];
+    BR -> RB [arrowhead=vee, arrowsize=0.7, penwidth=1.0, label="1", fontsize=9, color="#444444"];
+    U -> RB [arrowhead=vee, arrowsize=0.7, penwidth=1.0, label="1", fontsize=9, color="#444444"];
+    RB_a0 [shape=ellipse, style="filled", fillcolor="#FDFDFD", color="#7B1FA280", fontsize=8.5, fontcolor="#333333", penwidth=0.7, height=0.26, margin=0.04, label="resolved_at"];
+    RB -> RB_a0 [arrowhead=none, color="#BBBBBB", penwidth=0.6];
+
+  // ============================================================= LEGEND
+  subgraph cluster_legend {
+    label=""; style="invis"; margin=6;
+    lg_note [shape=note, style=filled, fillcolor="#FFFDF2", color="#D9B168", fontsize=9, fontname="Helvetica", label=<
+      <B>Notation</B><BR ALIGN="LEFT"/>
+      Rectangle = entity &#8226; double rectangle = associative/weak entity<BR ALIGN="LEFT"/>
+      Ellipse = attribute &#8226; <U>underlined</U> = key &#8226; <I>dashed italic</I> = key inherited via ISA<BR ALIGN="LEFT"/>
+      Diamond = relationship &#8226; triangle "d" = disjoint, total ISA specialization<BR ALIGN="LEFT"/>
+      Thick edge = total (mandatory) &#8226; thin edge = partial (optional) participation<BR ALIGN="LEFT"/>
+      FK columns are not drawn as attributes — the relationship edge is the reference<BR ALIGN="LEFT"/>
+      <BR ALIGN="LEFT"/>
+      <FONT POINT-SIZE="7.5" COLOR="#888888">Full list of corrections &amp; reasoning: notehub_erd_explained.md</FONT><BR ALIGN="LEFT"/>
+    >];
+  }
+}
