@@ -26,8 +26,8 @@ const AUTH_ROUTES = [
 
 export function middleware(request: NextRequest) {
   const { pathname } = request.nextUrl;
-  const userId = request.cookies.get('user_id')?.value;
-  const isAuthenticated = !!userId;
+  const sessionUserId = request.cookies.get('session_user_id')?.value;
+  const isAuthenticated = !!sessionUserId;
 
   // Check if route requires authentication
   const isProtectedRoute = PROTECTED_ROUTES.some(route => 

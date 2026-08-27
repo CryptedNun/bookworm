@@ -1,379 +1,323 @@
-/**
- * Notebook CRUD Server Actions
- * 
- * Handles notebook creation, retrieval, update, and deletion.
- * Implements ISA hierarchy (resource → notebook) with proper transactions.
- */
-
 'use server';
 
 import { sql } from '@/lib/db';
-import { getCurrentUser } from './auth';
 import { revalidatePath } from 'next/cache';
 
 /**
- * Notebook type matching database schema
+ * Server Actions for Notebooks Management
  */
+
 export interface Notebook {
   notebook_id: string;
-  owner_id: string;
   title: string;
   description: string | null;
-  deleted_at: string | null;
-  visibility: 'PRIVATE' | 'SHARED' | 'PUBLIC';
-  created_at: string;
-  // Joined fields
+  visibility: 'PUBLIC' | 'PRIVATE' | 'UNLISTED' | 'SHARED';
+  created_at: Date;
+  role_type: 'OWNER' | 'MAINTAINER' | 'CONTRIBUTOR';
+  notes_count: number;
   owner_username?: string;
   owner_email?: string;
-  notes_count?: number;
+}
+
+interface CreateNotebookInput {
+  title: string;
+  description?: string;
+  visibility?: 'PUBLIC' | 'PRIVATE' | 'UNLISTED';
+  userId: string;
+}
+
+interface CreateNotebookResult {
+  success: boolean;
+  notebookId?: string;
+  error?: string;
 }
 
 /**
  * Create a new notebook
  * 
- * Transaction steps:
- * 1. Insert into resources (ISA supertype)
- * 2. Insert into notebooks (ISA subtype)
- * 3. Grant OWNER role to creator in collaborator_roles
- * 
- * @param data - Notebook creation data
- * @returns Created notebook or error
+ * Creates:
+ * 1. Resource entry (ISA hierarchy)
+ * 2. Notebook record
+ * 3. Owner collaborator role
  */
-export async function createNotebook(data: {
-  title: string;
-  description?: string;
-  visibility?: 'PRIVATE' | 'SHARED' | 'PUBLIC';
-}): Promise<{ success: boolean; notebook?: Notebook; error?: string }> {
-  console.log('createNotebook called with:', { title: data.title, visibility: data.visibility });
-  
+export async function createNotebook(input: CreateNotebookInput): Promise<CreateNotebookResult> {
   try {
-    // 1. Authenticate
-    const user = await getCurrentUser();
-    if (!user) {
-      console.error('createNotebook: No authenticated user');
-      return { success: false, error: 'Authentication required' };
+    // Validate inputs
+    if (!input.title?.trim()) {
+      return { success: false, error: 'Title is required' };
+    }
+    if (!input.userId) {
+      return { success: false, error: 'User authentication required' };
     }
 
-    console.log('createNotebook: User authenticated:', user.username);
+    const visibility = input.visibility || 'PUBLIC';
 
-    // 2. Validate input
-    if (!data.title?.trim()) {
-      return { success: false, error: 'Notebook title is required' };
-    }
-
-    if (data.title.length > 200) {
-      return { success: false, error: 'Title must be 200 characters or less' };
-    }
-
-    // 3. Execute transaction (ISA hierarchy + permissions)
-    const visibility = data.visibility || 'PRIVATE';
-    const description = data.description?.trim() || null;
-
-    console.log('createNotebook: Creating resource...');
-
-    // Create resource first
+    // Step 1: Create resource
     const [resource] = await sql`
       INSERT INTO resources (resource_type)
       VALUES ('NOTEBOOK')
-      RETURNING resource_id, created_at
-    ` as { resource_id: string; created_at: string }[];
+      RETURNING resource_id
+    `;
+    const notebookId = resource.resource_id;
 
-    console.log('createNotebook: Resource created:', resource.resource_id);
-
-    // Create notebook
-    const [notebook] = await sql`
-      INSERT INTO notebooks (notebook_id, owner_id, title, description, visibility)
-      VALUES (
-        ${resource.resource_id},
-        ${user.user_id},
-        ${data.title.trim()},
-        ${description},
-        ${visibility}
-      )
-      RETURNING *
-    ` as Notebook[];
-
-    console.log('createNotebook: Notebook created:', notebook.notebook_id);
-
-    // Grant OWNER role to creator
+    // Step 2: Create notebook
     await sql`
-      INSERT INTO collaborator_roles (user_id, resource_id, role_type, granted_by)
+      INSERT INTO notebooks (
+        notebook_id,
+        owner_id,
+        title,
+        description,
+        visibility
+      )
       VALUES (
-        ${user.user_id},
-        ${resource.resource_id},
-        'OWNER',
-        ${user.user_id}
+        ${notebookId},
+        ${input.userId},
+        ${input.title},
+        ${input.description || ''},
+        ${visibility}
       )
     `;
 
-    console.log('createNotebook: OWNER role granted');
+    // Step 3: Create owner collaborator role
+    await sql`
+      INSERT INTO collaborator_roles (
+        user_id,
+        resource_id,
+        role_type,
+        granted_by,
+        capabilities
+      )
+      VALUES (
+        ${input.userId},
+        ${notebookId},
+        'OWNER',
+        ${input.userId},
+        '{"can_create_issue": true, "can_delete_branch": true, "can_merge_branch": true, "can_add_contributor": true}'::jsonb
+      )
+    `;
 
-    const result = {
-      ...notebook,
-      created_at: resource.created_at,
-      owner_username: user.username,
-      owner_email: user.email,
-      notes_count: 0,
-    };
-
-    // 4. Revalidate dashboard
+    // Revalidate affected pages
     revalidatePath('/dashboard');
 
-    console.log('createNotebook: Success!', result);
-    return { success: true, notebook: result };
-  } catch (error: any) {
-    console.error('Create notebook error:', error);
-    console.error('Error details:', {
-      message: error.message,
-      code: error.code,
-      detail: error.detail,
-      stack: error.stack,
-    });
+    return {
+      success: true,
+      notebookId: notebookId,
+    };
+  } catch (error) {
+    console.error('Error creating notebook:', error);
     return {
       success: false,
-      error: `Database error: ${error.message}`,
+      error: error instanceof Error ? error.message : 'Failed to create notebook',
     };
   }
 }
 
 /**
- * Get all notebooks for the current user
- * 
- * Returns notebooks where user has any role (OWNER, MAINTAINER, CONTRIBUTOR)
+ * Get all notebooks for a user
  */
-export async function getUserNotebooks(): Promise<{
-  success: boolean;
-  notebooks?: Notebook[];
-  error?: string;
-}> {
+export async function getNotebooks(userId: string) {
   try {
-    const user = await getCurrentUser();
-    if (!user) {
-      return { success: false, error: 'Authentication required' };
-    }
-
     const notebooks = await sql`
       SELECT 
         nb.notebook_id,
-        nb.owner_id,
         nb.title,
         nb.description,
-        nb.deleted_at,
         nb.visibility,
+        cr.role_type,
         r.created_at,
-        u.username as owner_username,
-        u.email as owner_email,
-        COUNT(DISTINCT n.note_id) as notes_count,
-        cr.role_type as user_role
+        (SELECT COUNT(*) FROM notes n WHERE n.notebook_id = nb.notebook_id AND n.deleted_at IS NULL) as notes_count
       FROM notebooks nb
-      INNER JOIN resources r ON r.resource_id = nb.notebook_id
-      INNER JOIN users u ON u.user_id = nb.owner_id
       INNER JOIN collaborator_roles cr ON cr.resource_id = nb.notebook_id
-      LEFT JOIN notes n ON n.notebook_id = nb.notebook_id AND n.deleted_at IS NULL
-      WHERE cr.user_id = ${user.user_id}
+      INNER JOIN resources r ON r.resource_id = nb.notebook_id
+      WHERE cr.user_id = ${userId}
         AND nb.deleted_at IS NULL
-      GROUP BY 
-        nb.notebook_id, 
-        nb.owner_id, 
-        nb.title, 
-        nb.description, 
-        nb.deleted_at, 
-        nb.visibility,
-        r.created_at,
-        u.username,
-        u.email,
-        cr.role_type
       ORDER BY r.created_at DESC
-    ` as Notebook[];
+    `;
 
-    return { success: true, notebooks };
-  } catch (error: any) {
-    console.error('Get user notebooks error:', error);
-    return {
-      success: false,
-      error: error.message || 'Failed to fetch notebooks',
-    };
+    return notebooks;
+  } catch (error) {
+    console.error('Error fetching notebooks:', error);
+    return [];
   }
 }
 
 /**
- * Get a single notebook by ID
- * 
- * Includes permission check - user must have access
+ * Get user notebooks (wrapper for compatibility with dashboard page)
  */
-export async function getNotebook(notebookId: string): Promise<{
-  success: boolean;
-  notebook?: Notebook;
-  error?: string;
-}> {
+export async function getUserNotebooks() {
   try {
-    const user = await getCurrentUser();
-    if (!user) {
-      return { success: false, error: 'Authentication required' };
+    // Get current user from cookie
+    const { cookies: getCookies } = await import('next/headers');
+    const cookieStore = await getCookies();
+    const userId = cookieStore.get('session_user_id')?.value;
+
+    if (!userId) {
+      return { success: false, error: 'Not authenticated' };
+    }
+
+    const notebooks = await getNotebooks(userId);
+    return { success: true, notebooks };
+  } catch (error) {
+    console.error('Error in getUserNotebooks:', error);
+    return { success: false, error: 'Failed to fetch notebooks' };
+  }
+}
+
+/**
+ * Get a single notebook with details
+ */
+export async function getNotebook(notebookId: string, userId?: string) {
+  try {
+    // If userId not provided, get from cookie
+    if (!userId) {
+      const { cookies: getCookies } = await import('next/headers');
+      const cookieStore = await getCookies();
+      userId = cookieStore.get('session_user_id')?.value;
+      
+      if (!userId) {
+        return { success: false, error: 'Not authenticated' };
+      }
     }
 
     const [notebook] = await sql`
       SELECT 
         nb.notebook_id,
-        nb.owner_id,
         nb.title,
         nb.description,
-        nb.deleted_at,
         nb.visibility,
         r.created_at,
+        cr.role_type,
         u.username as owner_username,
-        u.email as owner_email,
-        COUNT(DISTINCT n.note_id) as notes_count
+        u.email as owner_email
       FROM notebooks nb
-      INNER JOIN resources r ON r.resource_id = nb.notebook_id
+      INNER JOIN collaborator_roles cr ON cr.resource_id = nb.notebook_id
       INNER JOIN users u ON u.user_id = nb.owner_id
-      LEFT JOIN notes n ON n.notebook_id = nb.notebook_id AND n.deleted_at IS NULL
+      INNER JOIN resources r ON r.resource_id = nb.notebook_id
       WHERE nb.notebook_id = ${notebookId}
+        AND cr.user_id = ${userId}
         AND nb.deleted_at IS NULL
-        AND EXISTS (
-          SELECT 1 FROM collaborator_roles
-          WHERE resource_id = nb.notebook_id
-          AND user_id = ${user.user_id}
-        )
-      GROUP BY 
-        nb.notebook_id, 
-        nb.owner_id, 
-        nb.title, 
-        nb.description, 
-        nb.deleted_at, 
-        nb.visibility,
-        r.created_at,
-        u.username,
-        u.email
-    ` as Notebook[];
+    `;
 
     if (!notebook) {
-      return { success: false, error: 'Notebook not found or access denied' };
+      return { success: false, error: 'Notebook not found or no access' };
     }
 
     return { success: true, notebook };
-  } catch (error: any) {
-    console.error('Get notebook error:', error);
-    return {
-      success: false,
-      error: error.message || 'Failed to fetch notebook',
-    };
+  } catch (error) {
+    console.error('Error fetching notebook:', error);
+    return { success: false, error: 'Failed to fetch notebook' };
   }
 }
 
 /**
- * Update notebook metadata
- * 
- * Only OWNER can update title/description/visibility
+ * Update notebook details
  */
 export async function updateNotebook(
   notebookId: string,
-  data: {
-    title?: string;
-    description?: string;
-    visibility?: 'PRIVATE' | 'SHARED' | 'PUBLIC';
-  }
-): Promise<{ success: boolean; notebook?: Notebook; error?: string }> {
+  updates: { title?: string; description?: string; visibility?: 'PUBLIC' | 'PRIVATE' | 'UNLISTED' },
+  userId: string
+) {
   try {
-    const user = await getCurrentUser();
-    if (!user) {
-      return { success: false, error: 'Authentication required' };
-    }
-
-    // Check if user is OWNER
-    const [role] = await sql`
-      SELECT role_type FROM collaborator_roles
+    // Verify permission
+    const [permission] = await sql`
+      SELECT role_type
+      FROM collaborator_roles
       WHERE resource_id = ${notebookId}
-      AND user_id = ${user.user_id}
-    ` as { role_type: string }[];
+        AND user_id = ${userId}
+        AND role_type IN ('OWNER', 'MAINTAINER')
+    `;
 
-    if (!role || role.role_type !== 'OWNER') {
-      return { success: false, error: 'Only notebook owner can update metadata' };
-    }
-
-    // Build update query
-    if (data.title?.trim()) {
-      await sql`
-        UPDATE notebooks
-        SET title = ${data.title.trim()}
-        WHERE notebook_id = ${notebookId}
-      `;
-    }
-    
-    if (data.description !== undefined) {
-      await sql`
-        UPDATE notebooks
-        SET description = ${data.description?.trim() || null}
-        WHERE notebook_id = ${notebookId}
-      `;
-    }
-    
-    if (data.visibility) {
-      await sql`
-        UPDATE notebooks
-        SET visibility = ${data.visibility}
-        WHERE notebook_id = ${notebookId}
-      `;
+    if (!permission) {
+      return { success: false, error: 'Insufficient permissions' };
     }
 
-    // Fetch updated notebook
-    const result = await getNotebook(notebookId);
+    // Build update query dynamically
+    const updateFields: string[] = [];
+    const values: any[] = [];
+
+    if (updates.title !== undefined) {
+      updateFields.push(`title = $${values.length + 1}`);
+      values.push(updates.title);
+    }
+    if (updates.description !== undefined) {
+      updateFields.push(`description = $${values.length + 1}`);
+      values.push(updates.description);
+    }
+    if (updates.visibility !== undefined) {
+      updateFields.push(`visibility = $${values.length + 1}`);
+      values.push(updates.visibility);
+    }
+
+    if (updateFields.length === 0) {
+      return { success: false, error: 'No fields to update' };
+    }
+
+    await sql`
+      UPDATE notebooks
+      SET ${sql.unsafe(updateFields.join(', '))},
+          updated_at = NOW()
+      WHERE notebook_id = ${notebookId}
+    `;
 
     revalidatePath('/dashboard');
+    revalidatePath(`/dashboard/notebooks/${notebookId}`);
 
-    return result;
-  } catch (error: any) {
-    console.error('Update notebook error:', error);
+    return { success: true };
+  } catch (error) {
+    console.error('Error updating notebook:', error);
     return {
       success: false,
-      error: error.message || 'Failed to update notebook',
+      error: error instanceof Error ? error.message : 'Failed to update notebook',
     };
   }
 }
 
 /**
- * Soft delete a notebook
- * 
- * Sets deleted_at instead of hard DELETE
- * Only OWNER can delete
+ * Delete notebook (only if empty or owner wants to force delete)
  */
-export async function deleteNotebook(notebookId: string): Promise<{
-  success: boolean;
-  error?: string;
-}> {
+export async function deleteNotebook(notebookId: string, userId: string, force: boolean = false) {
   try {
-    const user = await getCurrentUser();
-    if (!user) {
-      return { success: false, error: 'Authentication required' };
-    }
-
-    // Check if user is OWNER
-    const [role] = await sql`
-      SELECT role_type FROM collaborator_roles
+    // Verify owner permission
+    const [permission] = await sql`
+      SELECT role_type
+      FROM collaborator_roles
       WHERE resource_id = ${notebookId}
-      AND user_id = ${user.user_id}
-    ` as { role_type: string }[];
+        AND user_id = ${userId}
+        AND role_type = 'OWNER'
+    `;
 
-    if (!role || role.role_type !== 'OWNER') {
-      return { success: false, error: 'Only notebook owner can delete' };
+    if (!permission) {
+      return { success: false, error: 'Only owners can delete notebooks' };
     }
 
-    // Soft delete
-    await sql`
-      UPDATE notebooks
-      SET deleted_at = NOW()
+    // Check if notebook has notes
+    const [noteCount] = await sql`
+      SELECT COUNT(*) as count
+      FROM notes
       WHERE notebook_id = ${notebookId}
-      AND deleted_at IS NULL
+    `;
+
+    if (!force && noteCount.count > 0) {
+      return {
+        success: false,
+        error: `Notebook contains ${noteCount.count} notes. Delete them first or use force delete.`,
+      };
+    }
+
+    // Delete notebook (CASCADE will handle related records)
+    await sql`
+      DELETE FROM resources
+      WHERE resource_id = ${notebookId}
     `;
 
     revalidatePath('/dashboard');
 
     return { success: true };
-  } catch (error: any) {
-    console.error('Delete notebook error:', error);
+  } catch (error) {
+    console.error('Error deleting notebook:', error);
     return {
       success: false,
-      error: error.message || 'Failed to delete notebook',
+      error: error instanceof Error ? error.message : 'Failed to delete notebook',
     };
   }
 }

@@ -24,11 +24,13 @@ export function AuthCard() {
   const [signupUsername, setSignupUsername] = useState("");
   const [signupPassword, setSignupPassword] = useState("");
   const [isLoading, setIsLoading] = useState(false);
+  const [error, setError] = useState<string | null>(null);
   const [dbStatus, setDbStatus] = useState<string | null>(null);
 
   const handleSignIn = async (e: React.FormEvent) => {
     e.preventDefault();
     setIsLoading(true);
+    setError(null);
 
     try {
       // Import dynamically to avoid server/client boundary issues
@@ -36,13 +38,17 @@ export function AuthCard() {
       const result = await signIn(usernameOrEmail, password);
 
       if (result.success) {
-        router.push('/dashboard');
+        // Small delay to show success state
+        setTimeout(() => {
+          router.push('/dashboard');
+        }, 100);
       } else {
-        alert(result.error || 'Sign in failed');
+        setError(result.error || 'Sign in failed');
         setIsLoading(false);
       }
     } catch (error: any) {
-      alert('Sign in error: ' + error.message);
+      console.error('Sign in error:', error);
+      setError('Network error. Check your database connection.');
       setIsLoading(false);
     }
   };
@@ -57,6 +63,7 @@ export function AuthCard() {
 
   const handleQuickDemo = async () => {
     setIsLoading(true);
+    setError(null);
     
     try {
       const { signIn } = await import('@/actions/auth');
@@ -64,13 +71,16 @@ export function AuthCard() {
       const result = await signIn('alice@bookworm.dev', 'demo');
       
       if (result.success) {
-        router.push("/dashboard");
+        setTimeout(() => {
+          router.push("/dashboard");
+        }, 100);
       } else {
-        alert('Demo login failed: ' + result.error);
+        setError('Demo login failed: ' + result.error);
         setIsLoading(false);
       }
     } catch (error: any) {
-      alert('Demo login error: ' + error.message);
+      console.error('Demo login error:', error);
+      setError('Network error during demo login');
       setIsLoading(false);
     }
   };
@@ -165,6 +175,24 @@ export function AuthCard() {
         {/* Tab 1: Sign In */}
         {tab === "signin" && (
           <form onSubmit={handleSignIn} className="p-6 sm:p-7 space-y-4">
+            {/* Error Display */}
+            {error && (
+              <div className="p-3 rounded-lg bg-red-950/30 border border-red-500/30 text-red-400 text-sm flex items-start gap-2">
+                <span className="shrink-0">⚠️</span>
+                <div className="flex-1">
+                  <p className="font-semibold">Sign In Failed</p>
+                  <p className="text-xs mt-0.5 text-red-300">{error}</p>
+                </div>
+                <button
+                  type="button"
+                  onClick={() => setError(null)}
+                  className="shrink-0 text-red-400 hover:text-red-300"
+                >
+                  ✕
+                </button>
+              </div>
+            )}
+
             <div>
               <label className="block text-xs font-semibold text-zinc-300 uppercase tracking-wider mb-2">
                 Username or Email Address
@@ -231,10 +259,13 @@ export function AuthCard() {
               <button
                 type="submit"
                 disabled={isLoading}
-                className="w-full py-2.5 px-4 rounded-xl bg-emerald-500 hover:bg-emerald-400 text-zinc-950 font-semibold text-sm transition-all shadow-lg shadow-emerald-500/20 flex items-center justify-center gap-2 group cursor-pointer disabled:opacity-70"
+                className="w-full py-2.5 px-4 rounded-xl bg-emerald-500 hover:bg-emerald-400 text-zinc-950 font-semibold text-sm transition-all shadow-lg shadow-emerald-500/20 flex items-center justify-center gap-2 group cursor-pointer disabled:opacity-70 disabled:cursor-not-allowed"
               >
                 {isLoading ? (
-                  <span className="inline-block w-4 h-4 border-2 border-zinc-950 border-t-transparent rounded-full animate-spin" />
+                  <>
+                    <span className="inline-block w-4 h-4 border-2 border-zinc-950 border-t-transparent rounded-full animate-spin" />
+                    <span>Signing in...</span>
+                  </>
                 ) : (
                   <>
                     Sign In to BookWorm
@@ -246,10 +277,20 @@ export function AuthCard() {
               <button
                 type="button"
                 onClick={handleQuickDemo}
-                className="w-full py-2 px-4 rounded-xl bg-zinc-800/80 hover:bg-zinc-800 text-zinc-200 font-medium text-xs border border-zinc-700/60 transition-all flex items-center justify-center gap-2 cursor-pointer"
+                disabled={isLoading}
+                className="w-full py-2 px-4 rounded-xl bg-zinc-800/80 hover:bg-zinc-800 text-zinc-200 font-medium text-xs border border-zinc-700/60 transition-all flex items-center justify-center gap-2 cursor-pointer disabled:opacity-50 disabled:cursor-not-allowed"
               >
-                <Sparkles className="w-3.5 h-3.5 text-amber-400" />
-                Instant Demo Access (as @alice)
+                {isLoading ? (
+                  <>
+                    <span className="inline-block w-3 h-3 border-2 border-zinc-400 border-t-transparent rounded-full animate-spin" />
+                    <span>Loading...</span>
+                  </>
+                ) : (
+                  <>
+                    <Sparkles className="w-3.5 h-3.5 text-amber-400" />
+                    Instant Demo Access (as @alice)
+                  </>
+                )}
               </button>
 
               <button

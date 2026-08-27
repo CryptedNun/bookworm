@@ -158,14 +158,24 @@ export default function BranchesClient({ note, branches, notebookId, user }: Bra
             </div>
           </div>
 
-          <button
-            onClick={() => router.push(`/dashboard/notebooks/${notebookId}/notes/${note.note_id}/issues`)}
-            disabled={loading}
-            className="px-4 py-2 rounded-lg bg-emerald-500 hover:bg-emerald-400 text-zinc-950 text-sm font-medium transition-colors disabled:opacity-50 flex items-center gap-2"
-          >
-            <Plus className="w-4 h-4" />
-            Create Issue
-          </button>
+          <div className="flex items-center gap-2">
+            <Link
+              href={`/dashboard/notebooks/${notebookId}/notes/${note.note_id}/tree`}
+              className="px-4 py-2 rounded-lg bg-blue-500/10 hover:bg-blue-500/20 text-blue-400 border border-blue-500/20 text-sm font-medium transition-colors flex items-center gap-2"
+            >
+              <GitBranch className="w-4 h-4" />
+              Tree View
+            </Link>
+            
+            <button
+              onClick={() => router.push(`/dashboard/notebooks/${notebookId}/notes/${note.note_id}/issues`)}
+              disabled={loading}
+              className="px-4 py-2 rounded-lg bg-emerald-500 hover:bg-emerald-400 text-zinc-950 text-sm font-medium transition-colors disabled:opacity-50 flex items-center gap-2"
+            >
+              <Plus className="w-4 h-4" />
+              Create Issue
+            </button>
+          </div>
         </div>
 
         {/* Status Messages */}

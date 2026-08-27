@@ -5,7 +5,7 @@
  * Implements version control, content deduplication, and LexoRank ordering
  */
 
-import { getNote } from '@/actions/notes';
+import { getNoteWithBlocks } from '@/actions/notes';
 import { getCurrentUser } from '@/actions/auth';
 import { getBranches } from '@/actions/branches';
 import { redirect } from 'next/navigation';
@@ -29,7 +29,7 @@ export default async function NoteEditPage({ params, searchParams }: PageProps) 
   const { branch: branchId } = await searchParams;
 
   // Fetch note with blocks
-  const noteResult = await getNote(noteId, branchId);
+  const noteResult = await getNoteWithBlocks(noteId, branchId);
   
   if (!noteResult.success || !noteResult.note) {
     redirect(`/dashboard/notebooks/${notebookId}`);
@@ -57,7 +57,7 @@ export default async function NoteEditPage({ params, searchParams }: PageProps) 
 
   return (
     <NoteEditor 
-      note={noteResult.note as any}
+      note={{ ...noteResult.note, blocks: noteResult.note.blocks || [] } as any}
       notebookId={notebookId}
       user={user}
       branches={branches as any}

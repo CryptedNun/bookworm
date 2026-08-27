@@ -799,7 +799,7 @@ export function LeftSidebar({
                   >
                     {/* Notebook Header - Click to View */}
                     <Link
-                      href={`/dashboard/notebooks/${nb.id}`}
+                      href={`/dashboard/notebooks/${nb.id}/manage`}
                       className="w-full px-2.5 py-2 flex items-center justify-between hover:bg-zinc-800/50 transition-colors cursor-pointer text-left group"
                     >
                       <div className="flex items-center gap-2 min-w-0">
@@ -1394,19 +1394,21 @@ export function CreateModal({
   isOpen,
   initialType,
   notebooks = [],
+  userId,
   onClose,
   onSuccess,
 }: {
   isOpen: boolean;
   initialType: "notebook" | "note" | "issue" | "branch" | "fork";
   notebooks?: Array<{ notebook_id: string; title: string; }>;
+  userId: string;
   onClose: () => void;
   onSuccess: (message: string) => void;
 }) {
   const [activeType, setActiveType] = useState<"notebook" | "note" | "issue" | "branch" | "fork">(initialType);
   const [title, setTitle] = useState("");
   const [description, setDescription] = useState("");
-  const [visibility, setVisibility] = useState<"PRIVATE" | "SHARED" | "PUBLIC">("PRIVATE");
+  const [visibility, setVisibility] = useState<"PRIVATE" | "UNLISTED" | "PUBLIC">("PRIVATE");
   const [selectedNotebook, setSelectedNotebook] = useState<string>("");
   const [targetSlot, setTargetSlot] = useState("Slot #42 (Paragraph: AVL double rotation)");
   const [assignee, setAssignee] = useState("@alice");
@@ -1440,6 +1442,7 @@ export function CreateModal({
           title,
           description,
           visibility,
+          userId,
         });
 
         console.log('CreateModal: Result received:', result);
@@ -1458,7 +1461,9 @@ export function CreateModal({
         const result = await createNote({
           notebookId: selectedNotebook,
           title,
+          description,
           visibility,
+          userId,
         });
 
         console.log('CreateModal: Note result:', result);
@@ -1652,15 +1657,15 @@ export function CreateModal({
                 </button>
                 <button
                   type="button"
-                  onClick={() => setVisibility("SHARED")}
+                  onClick={() => setVisibility("UNLISTED")}
                   className={`p-2.5 rounded-lg border flex flex-col items-center gap-1 cursor-pointer text-left transition-colors ${
-                    visibility === "SHARED"
+                    visibility === "UNLISTED"
                       ? "border-emerald-500 bg-emerald-500/10 text-emerald-400"
                       : "border-zinc-800 bg-zinc-950/50 text-zinc-400 hover:text-zinc-200"
                   }`}
                 >
                   <Star className="w-4 h-4" />
-                  <span className="font-semibold text-[11px]">Shared</span>
+                  <span className="font-semibold text-[11px]">Unlisted</span>
                 </button>
                 <button
                   type="button"
@@ -1745,11 +1750,11 @@ export default function DashboardClient({ user, notebooks }: DashboardClientProp
       email: user.email,
       avatarUrl: user.avatar_url || currentUser.avatarUrl,
       stats: {
-        notebooksCount: user.notebooks_count,
-        notesCount: user.notes_count,
-        contributedCount: user.contributed_notes_count,
-        issuesCount: 0, // TODO: Query from database
-        commitsCount: user.commits_count,
+        notebooksCount: user.stats.notebooks_count,
+        notesCount: user.stats.notes_count,
+        contributedCount: user.stats.contributed_count,
+        issuesCount: user.stats.issues_count,
+        commitsCount: user.stats.commits_count,
       },
     });
   }, [user]);
@@ -1809,6 +1814,7 @@ export default function DashboardClient({ user, notebooks }: DashboardClientProp
         isOpen={isCreateOpen}
         initialType={createType}
         notebooks={notebooks}
+        userId={user.user_id}
         onClose={() => setIsCreateOpen(false)}
         onSuccess={handleShowToast}
       />

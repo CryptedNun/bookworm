@@ -67,7 +67,7 @@ export async function getBranches(noteId: string, includeCommits = false) {
         b.is_merged,
         b.selected_by,
         b.selected_at,
-        b.created_at,
+        first_c.created_at as created_at,
         c.commit_id as latest_commit_id,
         c.commit_message as latest_commit_message,
         u.username as latest_commit_author,
@@ -79,6 +79,13 @@ export async function getBranches(noteId: string, includeCommits = false) {
         ) as commit_count
       FROM branches b
       LEFT JOIN LATERAL (
+        SELECT created_at
+        FROM commits
+        WHERE branch_id = b.branch_id
+        ORDER BY created_at ASC
+        LIMIT 1
+      ) first_c ON TRUE
+      LEFT JOIN LATERAL (
         SELECT commit_id, commit_message, author_id, created_at
         FROM commits
         WHERE branch_id = b.branch_id
@@ -87,7 +94,7 @@ export async function getBranches(noteId: string, includeCommits = false) {
       ) c ON TRUE
       LEFT JOIN users u ON u.user_id = c.author_id
       WHERE b.note_id = ${noteId}
-      ORDER BY b.is_main DESC, b.created_at DESC
+      ORDER BY b.is_main DESC, first_c.created_at DESC
     `;
 
     if (includeCommits) {

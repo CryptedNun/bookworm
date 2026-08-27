@@ -12,17 +12,21 @@ import {
   Lock,
   Globe,
   EyeOff,
+  Loader2,
 } from "lucide-react";
+import { createNotebook } from "@/actions/notebooks";
+import { createNote } from "@/actions/notes";
 
 interface CreateModalProps {
   isOpen: boolean;
   initialType: "notebook" | "note" | "issue" | "branch" | "fork";
   notebooks?: Array<{ notebook_id: string; title: string; }>;
+  userId: string;
   onClose: () => void;
   onSuccess: (message: string) => void;
 }
 
-export function CreateModal({ isOpen, initialType, notebooks = [], onClose, onSuccess }: CreateModalProps) {
+export function CreateModal({ isOpen, initialType, notebooks = [], userId, onClose, onSuccess }: CreateModalProps) {
   const [activeType, setActiveType] = useState<"notebook" | "note" | "issue" | "branch" | "fork">(initialType);
   const [title, setTitle] = useState("");
   const [description, setDescription] = useState("");
@@ -30,20 +34,77 @@ export function CreateModal({ isOpen, initialType, notebooks = [], onClose, onSu
   const [selectedNotebook, setSelectedNotebook] = useState<string>("");
   const [targetSlot, setTargetSlot] = useState("Slot #42 (Paragraph: AVL double rotation)");
   const [assignee, setAssignee] = useState("@alice");
+  const [isSubmitting, setIsSubmitting] = useState(false);
+  const [error, setError] = useState<string | null>(null);
 
   if (!isOpen) return null;
 
-  const handleSubmit = (e: React.FormEvent) => {
+  const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
-    let msg = "";
-    if (activeType === "notebook") msg = `Notebook "${title || "New Notebook"}" created successfully!`;
-    if (activeType === "note") msg = `Note "${title || "New Note"}" created with initial main branch & commit!`;
-    if (activeType === "issue") msg = `Issue "${title || "New Issue"}" created. Target block locked & branch spawned!`;
-    if (activeType === "branch") msg = `Branch "${title || "feature-branch"}" spawned for parallel editing!`;
-    if (activeType === "fork") msg = `Note forked with zero-cost CAS reference!`;
-    
-    onSuccess(msg);
-    onClose();
+    setIsSubmitting(true);
+    setError(null);
+
+    try {
+      if (activeType === "notebook") {
+        const result = await createNotebook({
+          title,
+          description,
+          visibility,
+          userId,
+        });
+
+        if (result.success) {
+          onSuccess(`Notebook "${title}" created successfully!`);
+          onClose();
+          // Reset form
+          setTitle("");
+          setDescription("");
+          setVisibility("PUBLIC");
+        } else {
+          setError(result.error || "Failed to create notebook");
+        }
+      } else if (activeType === "note") {
+        if (!selectedNotebook) {
+          setError("Please select a notebook");
+          setIsSubmitting(false);
+          return;
+        }
+
+        const result = await createNote({
+          title,
+          description,
+          visibility,
+          notebookId: selectedNotebook,
+          userId,
+        });
+
+        if (result.success) {
+          onSuccess(`Note "${title}" created with initial main branch & commit!`);
+          onClose();
+          // Reset form
+          setTitle("");
+          setDescription("");
+          setVisibility("PUBLIC");
+          setSelectedNotebook("");
+        } else {
+          setError(result.error || "Failed to create note");
+        }
+      } else {
+        // Placeholder for other types (issue, branch, fork)
+        let msg = "";
+        if (activeType === "issue") msg = `Issue "${title || "New Issue"}" created. Target block locked & branch spawned!`;
+        if (activeType === "branch") msg = `Branch "${title || "feature-branch"}" spawned for parallel editing!`;
+        if (activeType === "fork") msg = `Note forked with zero-cost CAS reference!`;
+        
+        onSuccess(msg);
+        onClose();
+      }
+    } catch (err) {
+      console.error("Error in handleSubmit:", err);
+      setError(err instanceof Error ? err.message : "An unexpected error occurred");
+    } finally {
+      setIsSubmitting(false);
+    }
   };
 
   return (
@@ -134,6 +195,14 @@ export function CreateModal({ isOpen, initialType, notebooks = [], onClose, onSu
 
         {/* Form Body */}
         <form onSubmit={handleSubmit} className="p-6 space-y-4 text-xs">
+          {/* Error Display */}
+          {error && (
+            <div className="p-3 rounded-lg bg-red-950/30 border border-red-500/30 text-red-400 text-xs">
+              <p className="font-semibold">Error</p>
+              <p className="text-[11px] mt-1">{error}</p>
+            </div>
+          )}
+
           <div>
             <label className="block text-zinc-300 font-semibold mb-1">
               {activeType === "issue" ? "Issue Summary / Title" : "Title / Name"}
@@ -143,6 +212,7 @@ export function CreateModal({ isOpen, initialType, notebooks = [], onClose, onSu
               required
               value={title}
               onChange={(e) => setTitle(e.target.value)}
+              disabled={isSubmitting}
               placeholder={
                 activeType === "notebook"
                   ? "e.g. Distributed Systems 2026"
@@ -152,7 +222,7 @@ export function CreateModal({ isOpen, initialType, notebooks = [], onClose, onSu
                   ? "e.g. Fix typo in Section 3 & add diagram"
                   : "e.g. feature-async-streams"
               }
-              className="w-full px-3 py-2 rounded-lg bg-zinc-950 border border-zinc-800 text-zinc-100 placeholder-zinc-500 focus:outline-none focus:border-emerald-500/50"
+              className="w-full px-3 py-2 rounded-lg bg-zinc-950 border border-zinc-800 text-zinc-100 placeholder-zinc-500 focus:outline-none focus:border-emerald-500/50 disabled:opacity-50"
             />
           </div>
 
@@ -160,13 +230,14 @@ export function CreateModal({ isOpen, initialType, notebooks = [], onClose, onSu
           {activeType === "note" && (
             <div>
               <label className="block text-zinc-300 font-semibold mb-1">
-                Select Notebook
+                Select Notebook <span className="text-red-400">*</span>
               </label>
               <select
                 required
                 value={selectedNotebook}
                 onChange={(e) => setSelectedNotebook(e.target.value)}
-                className="w-full px-3 py-2 rounded-lg bg-zinc-950 border border-zinc-800 text-zinc-100 focus:outline-none focus:border-emerald-500/50"
+                disabled={isSubmitting}
+                className="w-full px-3 py-2 rounded-lg bg-zinc-950 border border-zinc-800 text-zinc-100 focus:outline-none focus:border-emerald-500/50 disabled:opacity-50"
               >
                 <option value="">Choose a notebook...</option>
                 {notebooks.map((notebook) => (
@@ -212,8 +283,9 @@ export function CreateModal({ isOpen, initialType, notebooks = [], onClose, onSu
               rows={3}
               value={description}
               onChange={(e) => setDescription(e.target.value)}
+              disabled={isSubmitting}
               placeholder="Provide context, goals, or summary..."
-              className="w-full px-3 py-2 rounded-lg bg-zinc-950 border border-zinc-800 text-zinc-100 placeholder-zinc-500 focus:outline-none focus:border-emerald-500/50 resize-none"
+              className="w-full px-3 py-2 rounded-lg bg-zinc-950 border border-zinc-800 text-zinc-100 placeholder-zinc-500 focus:outline-none focus:border-emerald-500/50 resize-none disabled:opacity-50"
             />
           </div>
 
@@ -267,16 +339,27 @@ export function CreateModal({ isOpen, initialType, notebooks = [], onClose, onSu
             <button
               type="button"
               onClick={onClose}
-              className="px-4 py-2 rounded-xl bg-zinc-800 hover:bg-zinc-700 text-zinc-200 font-medium transition-colors cursor-pointer"
+              disabled={isSubmitting}
+              className="px-4 py-2 rounded-xl bg-zinc-800 hover:bg-zinc-700 text-zinc-200 font-medium transition-colors cursor-pointer disabled:opacity-50 disabled:cursor-not-allowed"
             >
               Cancel
             </button>
             <button
               type="submit"
-              className="px-4 py-2 rounded-xl bg-emerald-500 hover:bg-emerald-400 text-zinc-950 font-semibold shadow-md shadow-emerald-500/20 transition-all cursor-pointer flex items-center gap-1.5"
+              disabled={isSubmitting}
+              className="px-4 py-2 rounded-xl bg-emerald-500 hover:bg-emerald-400 text-zinc-950 font-semibold shadow-md shadow-emerald-500/20 transition-all cursor-pointer flex items-center gap-1.5 disabled:opacity-50 disabled:cursor-not-allowed"
             >
-              <Check className="w-3.5 h-3.5" />
-              Create Resource
+              {isSubmitting ? (
+                <>
+                  <Loader2 className="w-3.5 h-3.5 animate-spin" />
+                  Creating...
+                </>
+              ) : (
+                <>
+                  <Check className="w-3.5 h-3.5" />
+                  Create Resource
+                </>
+              )}
             </button>
           </div>
         </form>
