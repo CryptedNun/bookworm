@@ -216,7 +216,7 @@ export async function createNote(data: {
  * 
  * Returns full block data including: slot_id, lexorank, block_type, content, version metadata
  */
-export async function getNote(noteId: string): Promise<{
+export async function getNote(noteId: string, branchId?: string): Promise<{
   success: boolean;
   note?: Note & {
     blocks: Array<{
@@ -276,24 +276,39 @@ export async function getNote(noteId: string): Promise<{
       return { success: false, error: 'Access denied to this note' };
     }
 
-    // Get main branch
-    const [mainBranch] = await sql`
-      SELECT branch_id
-      FROM branches
-      WHERE note_id = ${noteId}
-      AND is_main = TRUE
-      LIMIT 1
-    ` as { branch_id: string }[];
+    // Get target branch (specified or main)
+    let targetBranch;
+    if (branchId) {
+      [targetBranch] = await sql`
+        SELECT branch_id
+        FROM branches
+        WHERE note_id = ${noteId}
+        AND branch_id = ${branchId}
+        LIMIT 1
+      ` as { branch_id: string }[];
 
-    if (!mainBranch) {
-      return { success: false, error: 'Note has no main branch' };
+      if (!targetBranch) {
+        return { success: false, error: 'Branch not found' };
+      }
+    } else {
+      [targetBranch] = await sql`
+        SELECT branch_id
+        FROM branches
+        WHERE note_id = ${noteId}
+        AND is_main = TRUE
+        LIMIT 1
+      ` as { branch_id: string }[];
+
+      if (!targetBranch) {
+        return { success: false, error: 'Note has no main branch' };
+      }
     }
 
-    // Get latest commit on main branch
+    // Get latest commit on target branch
     const [latestCommit] = await sql`
       SELECT commit_id
       FROM commits
-      WHERE branch_id = ${mainBranch.branch_id}
+      WHERE branch_id = ${targetBranch.branch_id}
       ORDER BY created_at DESC
       LIMIT 1
     ` as { commit_id: string }[];
@@ -306,7 +321,7 @@ export async function getNote(noteId: string): Promise<{
           ...noteData,
           blocks: [],
           latest_commit_id: '',
-          branch_id: mainBranch.branch_id,
+          branch_id: targetBranch.branch_id,
         },
       };
     }
@@ -344,7 +359,7 @@ export async function getNote(noteId: string): Promise<{
         ...noteData,
         blocks,
         latest_commit_id: latestCommit.commit_id,
-        branch_id: mainBranch.branch_id,
+        branch_id: targetBranch.branch_id,
       },
     };
   } catch (error: any) {

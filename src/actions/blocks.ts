@@ -187,7 +187,7 @@ export async function insertBlock(data: {
     // Create slot
     const [slot] = await sql`
       INSERT INTO logical_block_slots (note_id, parent_slot_id, lexorank_key, block_type)
-      VALUES (${data.noteId}, NULL, ${newLexorank}, ${data.blockType})
+      VALUES (${data.noteId}, NULL, ${newLexorank}, ${data.blockType}::text)
       RETURNING slot_id
     ` as { slot_id: string }[];
 
@@ -245,7 +245,7 @@ export async function insertBlock(data: {
         ${branch.branch_id},
         ${latestCommit.commit_id},
         ${user.user_id},
-        'Insert new ${data.blockType} block',
+        ${'Insert new ' + data.blockType + ' block'},
         ${commitHash}
       )
       RETURNING commit_id
@@ -272,6 +272,562 @@ export async function insertBlock(data: {
     return {
       success: false,
       error: error.message || 'Failed to insert block',
+    };
+  }
+}
+
+/**
+ * Split a block at selection point
+ * 
+ * Handles three cases:
+ * 1. Selection from beginning: Creates new block with selected text, updates original with remainder
+ * 2. Selection from middle: Keeps prefix in original, creates new block with selected text, creates third block with suffix
+ * 3. Selection from end: Updates original with prefix, creates new block with selected text
+ * 
+ * LexoRank positioning ensures correct ordering
+ */
+export async function splitBlock(data: {
+  noteId: string;
+  originalSlotId: string;
+  originalContent: string;
+  selectedText: string;
+  selectionStart: number;
+  selectionEnd: number;
+  newBlockType?: 'PARAGRAPH' | 'HEADING' | 'CODE' | 'QUOTE';
+}): Promise<{ success: boolean; error?: string; newSlotIds?: string[] }> {
+  try {
+    const user = await getCurrentUser();
+    if (!user) {
+      return { success: false, error: 'Authentication required' };
+    }
+
+    // Check permission
+    const [permission] = await sql`
+      SELECT role_type FROM collaborator_roles
+      WHERE resource_id = ${data.noteId}
+      AND user_id = ${user.user_id}
+      AND role_type IN ('OWNER', 'MAINTAINER')
+    ` as { role_type: string }[];
+
+    if (!permission) {
+      return { success: false, error: 'Insufficient permissions' };
+    }
+
+    // Validate selection
+    if (data.selectionStart < 0 || data.selectionEnd > data.originalContent.length || data.selectionStart >= data.selectionEnd) {
+      return { success: false, error: 'Invalid selection' };
+    }
+
+    // Extract parts
+    const beforeSelection = data.originalContent.substring(0, data.selectionStart);
+    const selectedText = data.originalContent.substring(data.selectionStart, data.selectionEnd);
+    const afterSelection = data.originalContent.substring(data.selectionEnd);
+
+    // Get original block info
+    const [originalBlock] = await sql`
+      SELECT lexorank_key, block_type FROM logical_block_slots
+      WHERE slot_id = ${data.originalSlotId}
+    ` as { lexorank_key: string; block_type: string }[];
+
+    if (!originalBlock) {
+      return { success: false, error: 'Original block not found' };
+    }
+
+    // Get the next block's lexorank
+    const [nextBlock] = await sql`
+      SELECT slot_id, lexorank_key FROM logical_block_slots
+      WHERE note_id = ${data.noteId}
+      AND lexorank_key > ${originalBlock.lexorank_key}
+      ORDER BY lexorank_key ASC
+      LIMIT 1
+    ` as { slot_id: string; lexorank_key: string }[];
+
+    const nextLexorank = nextBlock?.lexorank_key || null;
+    const newBlockType = data.newBlockType || originalBlock.block_type as any;
+
+    // Get main branch
+    const [branch] = await sql`
+      SELECT branch_id FROM branches
+      WHERE note_id = ${data.noteId}
+      AND is_main = TRUE
+      LIMIT 1
+    ` as { branch_id: string }[];
+
+    // Get latest commit
+    const [latestCommit] = await sql`
+      SELECT commit_id FROM commits
+      WHERE branch_id = ${branch.branch_id}
+      ORDER BY created_at DESC
+      LIMIT 1
+    ` as { commit_id: string }[];
+
+    const newSlotIds: string[] = [];
+
+    // Determine split strategy
+    const isFromBeginning = data.selectionStart === 0;
+    const isToEnd = data.selectionEnd === data.originalContent.length;
+    const isMiddle = !isFromBeginning && !isToEnd;
+
+    if (isFromBeginning && isToEnd) {
+      // Edge case: entire block selected - just convert block type if different
+      if (newBlockType !== originalBlock.block_type) {
+        // Update block type
+        await sql`
+          UPDATE logical_block_slots
+          SET block_type = ${newBlockType}::text
+          WHERE slot_id = ${data.originalSlotId}
+        `;
+      }
+      // No split needed
+      return { success: true, newSlotIds: [] };
+    }
+
+    // Calculate LexoRanks for new blocks
+    let firstNewLexorank: string;
+    let secondNewLexorank: string | null = null;
+
+    if (isFromBeginning) {
+      // Case 1: Selection from beginning
+      // Original block gets: afterSelection
+      // New block (between original and next) gets: selectedText
+      
+      firstNewLexorank = calculateLexoRankMidpoint(originalBlock.lexorank_key, nextLexorank);
+
+      // Update original block with remainder
+      const remainderHash = hashContent(afterSelection);
+      const remainderSize = getByteSize(afterSelection);
+
+      await sql`
+        INSERT INTO content_blobs (sha256, content_text, byte_size)
+        VALUES (${remainderHash}, ${afterSelection}, ${remainderSize})
+        ON CONFLICT (sha256) DO NOTHING
+      `;
+
+      const [remainderVersion] = await sql`
+        INSERT INTO block_version_contents (slot_id, author_id, content_blob_hash)
+        VALUES (${data.originalSlotId}, ${user.user_id}, ${remainderHash})
+        RETURNING version_id
+      ` as { version_id: string }[];
+
+      // Create new block with selected text
+      const [newSlot] = await sql`
+        INSERT INTO logical_block_slots (note_id, parent_slot_id, lexorank_key, block_type)
+        VALUES (${data.noteId}, NULL, ${firstNewLexorank}, ${newBlockType}::text)
+        RETURNING slot_id
+      ` as { slot_id: string }[];
+
+      newSlotIds.push(newSlot.slot_id);
+
+      const selectedHash = hashContent(selectedText);
+      const selectedSize = getByteSize(selectedText);
+
+      await sql`
+        INSERT INTO content_blobs (sha256, content_text, byte_size)
+        VALUES (${selectedHash}, ${selectedText}, ${selectedSize})
+        ON CONFLICT (sha256) DO NOTHING
+      `;
+
+      const [selectedVersion] = await sql`
+        INSERT INTO block_version_contents (slot_id, author_id, content_blob_hash)
+        VALUES (${newSlot.slot_id}, ${user.user_id}, ${selectedHash})
+        RETURNING version_id
+      ` as { version_id: string }[];
+
+      // Create commit
+      const commitHash = hashContent(JSON.stringify({
+        branch_id: branch.branch_id,
+        author_id: user.user_id,
+        timestamp: Date.now(),
+        action: 'split_from_beginning',
+      }));
+
+      const [newCommit] = await sql`
+        INSERT INTO commits (
+          branch_id,
+          parent_commit_id,
+          author_id,
+          commit_message,
+          commit_hash
+        )
+        VALUES (
+          ${branch.branch_id},
+          ${latestCommit.commit_id},
+          ${user.user_id},
+          'Split block from beginning',
+          ${commitHash}
+        )
+        RETURNING commit_id
+      ` as { commit_id: string }[];
+
+      // Update manifest
+      await sql`
+        INSERT INTO commit_manifests (commit_id, slot_id, version_id)
+        SELECT 
+          ${newCommit.commit_id},
+          cm.slot_id,
+          CASE 
+            WHEN cm.slot_id = ${data.originalSlotId} THEN ${remainderVersion.version_id}
+            ELSE cm.version_id
+          END
+        FROM commit_manifests cm
+        WHERE cm.commit_id = ${latestCommit.commit_id}
+      `;
+
+      await sql`
+        INSERT INTO commit_manifests (commit_id, slot_id, version_id)
+        VALUES (${newCommit.commit_id}, ${newSlot.slot_id}, ${selectedVersion.version_id})
+      `;
+
+    } else if (isToEnd) {
+      // Case 2: Selection to end
+      // Original block gets: beforeSelection
+      // New block (between original and next) gets: selectedText
+
+      firstNewLexorank = calculateLexoRankMidpoint(originalBlock.lexorank_key, nextLexorank);
+
+      // Update original block with prefix
+      const prefixHash = hashContent(beforeSelection);
+      const prefixSize = getByteSize(beforeSelection);
+
+      await sql`
+        INSERT INTO content_blobs (sha256, content_text, byte_size)
+        VALUES (${prefixHash}, ${beforeSelection}, ${prefixSize})
+        ON CONFLICT (sha256) DO NOTHING
+      `;
+
+      const [prefixVersion] = await sql`
+        INSERT INTO block_version_contents (slot_id, author_id, content_blob_hash)
+        VALUES (${data.originalSlotId}, ${user.user_id}, ${prefixHash})
+        RETURNING version_id
+      ` as { version_id: string }[];
+
+      // Create new block with selected text
+      const [newSlot] = await sql`
+        INSERT INTO logical_block_slots (note_id, parent_slot_id, lexorank_key, block_type)
+        VALUES (${data.noteId}, NULL, ${firstNewLexorank}, ${newBlockType}::text)
+        RETURNING slot_id
+      ` as { slot_id: string }[];
+
+      newSlotIds.push(newSlot.slot_id);
+
+      const selectedHash = hashContent(selectedText);
+      const selectedSize = getByteSize(selectedText);
+
+      await sql`
+        INSERT INTO content_blobs (sha256, content_text, byte_size)
+        VALUES (${selectedHash}, ${selectedText}, ${selectedSize})
+        ON CONFLICT (sha256) DO NOTHING
+      `;
+
+      const [selectedVersion] = await sql`
+        INSERT INTO block_version_contents (slot_id, author_id, content_blob_hash)
+        VALUES (${newSlot.slot_id}, ${user.user_id}, ${selectedHash})
+        RETURNING version_id
+      ` as { version_id: string }[];
+
+      // Create commit
+      const commitHash = hashContent(JSON.stringify({
+        branch_id: branch.branch_id,
+        author_id: user.user_id,
+        timestamp: Date.now(),
+        action: 'split_to_end',
+      }));
+
+      const [newCommit] = await sql`
+        INSERT INTO commits (
+          branch_id,
+          parent_commit_id,
+          author_id,
+          commit_message,
+          commit_hash
+        )
+        VALUES (
+          ${branch.branch_id},
+          ${latestCommit.commit_id},
+          ${user.user_id},
+          'Split block to end',
+          ${commitHash}
+        )
+        RETURNING commit_id
+      ` as { commit_id: string }[];
+
+      // Update manifest
+      await sql`
+        INSERT INTO commit_manifests (commit_id, slot_id, version_id)
+        SELECT 
+          ${newCommit.commit_id},
+          cm.slot_id,
+          CASE 
+            WHEN cm.slot_id = ${data.originalSlotId} THEN ${prefixVersion.version_id}
+            ELSE cm.version_id
+          END
+        FROM commit_manifests cm
+        WHERE cm.commit_id = ${latestCommit.commit_id}
+      `;
+
+      await sql`
+        INSERT INTO commit_manifests (commit_id, slot_id, version_id)
+        VALUES (${newCommit.commit_id}, ${newSlot.slot_id}, ${selectedVersion.version_id})
+      `;
+
+    } else {
+      // Case 3: Selection from middle
+      // Original block gets: beforeSelection
+      // First new block (between original and next) gets: selectedText
+      // Second new block (between first new and next) gets: afterSelection
+
+      firstNewLexorank = calculateLexoRankMidpoint(originalBlock.lexorank_key, nextLexorank);
+      secondNewLexorank = calculateLexoRankMidpoint(firstNewLexorank, nextLexorank);
+
+      // Update original block with prefix
+      const prefixHash = hashContent(beforeSelection);
+      const prefixSize = getByteSize(beforeSelection);
+
+      await sql`
+        INSERT INTO content_blobs (sha256, content_text, byte_size)
+        VALUES (${prefixHash}, ${beforeSelection}, ${prefixSize})
+        ON CONFLICT (sha256) DO NOTHING
+      `;
+
+      const [prefixVersion] = await sql`
+        INSERT INTO block_version_contents (slot_id, author_id, content_blob_hash)
+        VALUES (${data.originalSlotId}, ${user.user_id}, ${prefixHash})
+        RETURNING version_id
+      ` as { version_id: string }[];
+
+      // Create first new block with selected text
+      const [firstNewSlot] = await sql`
+        INSERT INTO logical_block_slots (note_id, parent_slot_id, lexorank_key, block_type)
+        VALUES (${data.noteId}, NULL, ${firstNewLexorank}, ${newBlockType}::text)
+        RETURNING slot_id
+      ` as { slot_id: string }[];
+
+      newSlotIds.push(firstNewSlot.slot_id);
+
+      const selectedHash = hashContent(selectedText);
+      const selectedSize = getByteSize(selectedText);
+
+      await sql`
+        INSERT INTO content_blobs (sha256, content_text, byte_size)
+        VALUES (${selectedHash}, ${selectedText}, ${selectedSize})
+        ON CONFLICT (sha256) DO NOTHING
+      `;
+
+      const [selectedVersion] = await sql`
+        INSERT INTO block_version_contents (slot_id, author_id, content_blob_hash)
+        VALUES (${firstNewSlot.slot_id}, ${user.user_id}, ${selectedHash})
+        RETURNING version_id
+      ` as { version_id: string }[];
+
+      // Create second new block with suffix
+      const [secondNewSlot] = await sql`
+        INSERT INTO logical_block_slots (note_id, parent_slot_id, lexorank_key, block_type)
+        VALUES (${data.noteId}, NULL, ${secondNewLexorank}, ${originalBlock.block_type}::text)
+        RETURNING slot_id
+      ` as { slot_id: string }[];
+
+      newSlotIds.push(secondNewSlot.slot_id);
+
+      const suffixHash = hashContent(afterSelection);
+      const suffixSize = getByteSize(afterSelection);
+
+      await sql`
+        INSERT INTO content_blobs (sha256, content_text, byte_size)
+        VALUES (${suffixHash}, ${afterSelection}, ${suffixSize})
+        ON CONFLICT (sha256) DO NOTHING
+      `;
+
+      const [suffixVersion] = await sql`
+        INSERT INTO block_version_contents (slot_id, author_id, content_blob_hash)
+        VALUES (${secondNewSlot.slot_id}, ${user.user_id}, ${suffixHash})
+        RETURNING version_id
+      ` as { version_id: string }[];
+
+      // Create commit
+      const commitHash = hashContent(JSON.stringify({
+        branch_id: branch.branch_id,
+        author_id: user.user_id,
+        timestamp: Date.now(),
+        action: 'split_from_middle',
+      }));
+
+      const [newCommit] = await sql`
+        INSERT INTO commits (
+          branch_id,
+          parent_commit_id,
+          author_id,
+          commit_message,
+          commit_hash
+        )
+        VALUES (
+          ${branch.branch_id},
+          ${latestCommit.commit_id},
+          ${user.user_id},
+          'Split block from middle',
+          ${commitHash}
+        )
+        RETURNING commit_id
+      ` as { commit_id: string }[];
+
+      // Update manifest
+      await sql`
+        INSERT INTO commit_manifests (commit_id, slot_id, version_id)
+        SELECT 
+          ${newCommit.commit_id},
+          cm.slot_id,
+          CASE 
+            WHEN cm.slot_id = ${data.originalSlotId} THEN ${prefixVersion.version_id}
+            ELSE cm.version_id
+          END
+        FROM commit_manifests cm
+        WHERE cm.commit_id = ${latestCommit.commit_id}
+      `;
+
+      await sql`
+        INSERT INTO commit_manifests (commit_id, slot_id, version_id)
+        VALUES 
+          (${newCommit.commit_id}, ${firstNewSlot.slot_id}, ${selectedVersion.version_id}),
+          (${newCommit.commit_id}, ${secondNewSlot.slot_id}, ${suffixVersion.version_id})
+      `;
+    }
+
+    revalidatePath(`/dashboard/notebooks/${data.noteId}`);
+
+    return { success: true, newSlotIds };
+  } catch (error: any) {
+    console.error('Split block error:', error);
+    return {
+      success: false,
+      error: error.message || 'Failed to split block',
+    };
+  }
+}
+
+/**
+ * Reorder blocks by updating LexoRank keys
+ * 
+ * When blocks are dragged, we need to:
+ * 1. Calculate new LexoRank for the moved block
+ * 2. Update the slot's lexorank_key
+ * 3. Create a new commit documenting the reorder
+ */
+export async function reorderBlock(data: {
+  noteId: string;
+  slotId: string;
+  newPrevSlotId: string | null;
+  newNextSlotId: string | null;
+}): Promise<{ success: boolean; error?: string }> {
+  try {
+    const user = await getCurrentUser();
+    if (!user) {
+      return { success: false, error: 'Authentication required' };
+    }
+
+    // Check permission
+    const [permission] = await sql`
+      SELECT role_type FROM collaborator_roles
+      WHERE resource_id = ${data.noteId}
+      AND user_id = ${user.user_id}
+      AND role_type IN ('OWNER', 'MAINTAINER')
+    ` as { role_type: string }[];
+
+    if (!permission) {
+      return { success: false, error: 'Insufficient permissions' };
+    }
+
+    // Get lexorank keys for new neighbors
+    let prevLexorank: string | null = null;
+    let nextLexorank: string | null = null;
+
+    if (data.newPrevSlotId) {
+      const [prev] = await sql`
+        SELECT lexorank_key FROM logical_block_slots WHERE slot_id = ${data.newPrevSlotId}
+      ` as { lexorank_key: string }[];
+      prevLexorank = prev?.lexorank_key || null;
+    }
+
+    if (data.newNextSlotId) {
+      const [next] = await sql`
+        SELECT lexorank_key FROM logical_block_slots WHERE slot_id = ${data.newNextSlotId}
+      ` as { lexorank_key: string }[];
+      nextLexorank = next?.lexorank_key || null;
+    }
+
+    // Calculate new lexorank position
+    const newLexorank = calculateLexoRankMidpoint(prevLexorank, nextLexorank);
+
+    // Update the slot's lexorank
+    await sql`
+      UPDATE logical_block_slots
+      SET lexorank_key = ${newLexorank}
+      WHERE slot_id = ${data.slotId}
+      AND note_id = ${data.noteId}
+    `;
+
+    // Get main branch
+    const [branch] = await sql`
+      SELECT branch_id FROM branches
+      WHERE note_id = ${data.noteId}
+      AND is_main = TRUE
+      LIMIT 1
+    ` as { branch_id: string }[];
+
+    if (!branch) {
+      return { success: false, error: 'Note has no main branch' };
+    }
+
+    // Get latest commit
+    const [latestCommit] = await sql`
+      SELECT commit_id FROM commits
+      WHERE branch_id = ${branch.branch_id}
+      ORDER BY created_at DESC
+      LIMIT 1
+    ` as { commit_id: string }[];
+
+    // Create new commit
+    const commitHash = hashContent(JSON.stringify({
+      branch_id: branch.branch_id,
+      author_id: user.user_id,
+      timestamp: Date.now(),
+      action: 'reorder',
+      slot_id: data.slotId,
+      new_lexorank: newLexorank,
+    }));
+
+    const [newCommit] = await sql`
+      INSERT INTO commits (
+        branch_id,
+        parent_commit_id,
+        author_id,
+        commit_message,
+        commit_hash
+      )
+      VALUES (
+        ${branch.branch_id},
+        ${latestCommit.commit_id},
+        ${user.user_id},
+        'Reorder blocks',
+        ${commitHash}
+      )
+      RETURNING commit_id
+    ` as { commit_id: string }[];
+
+    // Copy entire previous manifest (structure changed, not content)
+    await sql`
+      INSERT INTO commit_manifests (commit_id, slot_id, version_id)
+      SELECT ${newCommit.commit_id}, slot_id, version_id
+      FROM commit_manifests
+      WHERE commit_id = ${latestCommit.commit_id}
+    `;
+
+    revalidatePath(`/dashboard/notebooks/${data.noteId}`);
+
+    return { success: true };
+  } catch (error: any) {
+    console.error('Reorder block error:', error);
+    return {
+      success: false,
+      error: error.message || 'Failed to reorder block',
     };
   }
 }

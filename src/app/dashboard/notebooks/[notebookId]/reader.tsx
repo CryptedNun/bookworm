@@ -2,18 +2,16 @@
 
 import React, { useState } from 'react';
 import Link from 'next/link';
-import ReactMarkdown from 'react-markdown';
-import remarkGfm from 'remark-gfm';
 import { 
   BookOpen, 
   ArrowLeft, 
   FileText, 
-  Eye, 
-  Edit, 
   GitBranch,
   List,
   X,
+  Edit,
 } from 'lucide-react';
+import RobustMarkdown from '@/components/markdown/RobustMarkdown';
 import type { Notebook } from '@/actions/notebooks';
 import type { Note } from '@/actions/notes';
 import type { User } from '@/actions/auth';
@@ -177,91 +175,7 @@ export default function NotebookReader({ notebook, notes, user }: NotebookReader
                     </div>
 
                     {/* Note Content */}
-                    <div className="prose prose-invert prose-emerald max-w-none">
-                      <ReactMarkdown
-                        remarkPlugins={[remarkGfm]}
-                        components={{
-                          h1: ({ children, ...props }) => (
-                            <h2 className="text-3xl font-bold text-zinc-200 mt-8 mb-4" {...props}>
-                              {children}
-                            </h2>
-                          ),
-                          h2: ({ children, ...props }) => (
-                            <h3 className="text-2xl font-semibold text-zinc-300 mt-6 mb-3" {...props}>
-                              {children}
-                            </h3>
-                          ),
-                          h3: ({ children, ...props }) => (
-                            <h4 className="text-xl font-semibold text-zinc-300 mt-4 mb-2" {...props}>
-                              {children}
-                            </h4>
-                          ),
-                          p: ({ children, ...props }) => (
-                            <p className="text-zinc-300 leading-relaxed mb-4 text-lg" {...props}>
-                              {children}
-                            </p>
-                          ),
-                          ul: ({ children, ...props }) => (
-                            <ul className="list-disc list-inside text-zinc-300 space-y-2 mb-4 ml-4" {...props}>
-                              {children}
-                            </ul>
-                          ),
-                          ol: ({ children, ...props }) => (
-                            <ol className="list-decimal list-inside text-zinc-300 space-y-2 mb-4 ml-4" {...props}>
-                              {children}
-                            </ol>
-                          ),
-                          code: ({ inline, children, ...props }: any) =>
-                            inline ? (
-                              <code className="px-1.5 py-0.5 rounded bg-zinc-800 text-emerald-400 font-mono text-sm" {...props}>
-                                {children}
-                              </code>
-                            ) : (
-                              <code className="block p-4 rounded-lg bg-zinc-900 text-emerald-300 font-mono text-sm overflow-x-auto" {...props}>
-                                {children}
-                              </code>
-                            ),
-                          blockquote: ({ children, ...props }) => (
-                            <blockquote className="border-l-4 border-emerald-500 pl-4 italic text-zinc-400 my-4" {...props}>
-                              {children}
-                            </blockquote>
-                          ),
-                          hr: ({ ...props }) => (
-                            <hr className="border-zinc-800 my-8" {...props} />
-                          ),
-                          a: ({ children, href, ...props }) => (
-                            <a
-                              href={href}
-                              className="text-emerald-400 hover:text-emerald-300 underline"
-                              target="_blank"
-                              rel="noopener noreferrer"
-                              {...props}
-                            >
-                              {children}
-                            </a>
-                          ),
-                          table: ({ children, ...props }) => (
-                            <div className="overflow-x-auto my-6">
-                              <table className="min-w-full border border-zinc-800" {...props}>
-                                {children}
-                              </table>
-                            </div>
-                          ),
-                          th: ({ children, ...props }) => (
-                            <th className="border border-zinc-800 px-4 py-2 bg-zinc-900 text-zinc-200 font-semibold text-left" {...props}>
-                              {children}
-                            </th>
-                          ),
-                          td: ({ children, ...props }) => (
-                            <td className="border border-zinc-800 px-4 py-2 text-zinc-300" {...props}>
-                              {children}
-                            </td>
-                          ),
-                        }}
-                      >
-                        {note.content || '_This note is empty._'}
-                      </ReactMarkdown>
-                    </div>
+                    <RobustMarkdown content={note.content || '_This note is empty._'} />
                   </div>
                 );
               })}
