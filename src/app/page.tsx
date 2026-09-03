@@ -10,7 +10,6 @@ import {
   Mail,
   User as UserIcon,
   Sparkles,
-  ShieldCheck,
   CheckCircle2,
 } from "lucide-react";
 
@@ -128,14 +127,11 @@ export function AuthCard() {
             <GitBranch className="w-4 h-4 absolute -bottom-1 -right-1 text-emerald-300 bg-zinc-900 rounded-full p-0.5" />
           </div>
         </div>
-        <h1 className="text-3xl font-bold tracking-tight text-zinc-100 flex items-center justify-center gap-2">
+        <h1 className="text-3xl font-bold tracking-tight text-zinc-100">
           BookWorm
-          <span className="text-xs uppercase tracking-wider font-semibold px-2 py-0.5 bg-emerald-500/10 text-emerald-400 rounded-full border border-emerald-500/20">
-            v0.1 Local
-          </span>
         </h1>
         <p className="text-zinc-400 text-sm mt-1.5 font-normal">
-          GitHub for Notes • Branch, Collaborate & Version Control
+          Branch, collaborate & version-control your notes
         </p>
       </div>
 
@@ -191,8 +187,7 @@ export function AuthCard() {
             {/* Quick Demo User Switcher */}
             <div className="space-y-2 pt-1 pb-2">
               <div className="flex items-center justify-between text-[11px] text-zinc-400">
-                <span className="font-medium">Quick Demo Accounts (Password: "password")</span>
-                <span className="text-[10px] font-mono text-emerald-400">Salted PBKDF2</span>
+                <span className="font-medium">Demo Accounts</span>
               </div>
               <div className="grid grid-cols-2 gap-1.5">
                 {[
@@ -246,9 +241,6 @@ export function AuthCard() {
                 <label className="text-xs font-semibold text-zinc-300 uppercase tracking-wider">
                   Password
                 </label>
-                <span className="text-[11px] text-zinc-500">
-                  Default: <code className="text-emerald-400 font-mono">password</code>
-                </span>
               </div>
               <div className="relative">
                 <div className="absolute inset-y-0 left-0 pl-3.5 flex items-center pointer-events-none text-zinc-500">
@@ -265,20 +257,7 @@ export function AuthCard() {
               </div>
             </div>
 
-            <div className="flex items-center justify-between text-xs text-zinc-400 pt-1">
-              <label className="flex items-center gap-2 cursor-pointer select-none">
-                <input
-                  type="checkbox"
-                  defaultChecked
-                  className="w-4 h-4 rounded border-zinc-700 bg-zinc-950 text-emerald-500 focus:ring-0 focus:ring-offset-0 accent-emerald-500"
-                />
-                Remember this session
-              </label>
-              <span className="flex items-center gap-1 text-zinc-400 font-mono text-[10px]">
-                <ShieldCheck className="w-3.5 h-3.5 text-emerald-400" />
-                SHA-512 Salted
-              </span>
-            </div>
+
 
             <div className="pt-2 space-y-2.5">
               <button
@@ -388,9 +367,7 @@ export function AuthCard() {
                   className="w-full pl-10 pr-4 py-2 text-sm rounded-xl bg-zinc-950/70 border border-zinc-800 text-zinc-100 placeholder-zinc-500 focus:outline-none focus:ring-2 focus:ring-emerald-500/40 focus:border-emerald-500/50"
                 />
               </div>
-              <p className="text-[10px] text-zinc-500 mt-1">
-                Passwords are automatically hashed with a unique 16-byte cryptographic salt (PBKDF2 SHA-512).
-              </p>
+
             </div>
 
             <div className="pt-2">
@@ -413,32 +390,29 @@ export function AuthCard() {
         )}
 
         {/* Feature Highlights Footer */}
-        <div className="bg-zinc-950/80 border-t border-zinc-800/80 px-6 py-4">
+        <div className="bg-zinc-950/80 border-t border-zinc-800/80 px-6 py-3.5">
           <div className="grid grid-cols-2 gap-2 text-xs text-zinc-400">
             <div className="flex items-center gap-1.5">
               <CheckCircle2 className="w-3.5 h-3.5 text-emerald-400 shrink-0" />
-              <span>Salted Password Security</span>
+              <span>Secure Authentication</span>
             </div>
             <div className="flex items-center gap-1.5">
               <CheckCircle2 className="w-3.5 h-3.5 text-emerald-400 shrink-0" />
-              <span>Zero-Cost Forking (CAS)</span>
+              <span>Zero-Cost Forking</span>
             </div>
             <div className="flex items-center gap-1.5">
               <CheckCircle2 className="w-3.5 h-3.5 text-emerald-400 shrink-0" />
-              <span>Branch & Merge Engine</span>
+              <span>Branch & Merge</span>
             </div>
             <div className="flex items-center gap-1.5">
               <CheckCircle2 className="w-3.5 h-3.5 text-emerald-400 shrink-0" />
-              <span>Block-Level Issues</span>
+              <span>Block-Level Collaboration</span>
             </div>
           </div>
         </div>
       </div>
 
-      {/* Localhost Note */}
-      <p className="text-center text-xs text-zinc-500 mt-6">
-        Localhost development environment • Authentication simulation mode
-      </p>
+
     </div>
   );
 }

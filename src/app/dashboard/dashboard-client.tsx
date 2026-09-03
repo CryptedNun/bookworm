@@ -466,111 +466,94 @@ export function HomeFeed({
   onOpenCreate: (type: "notebook" | "note" | "issue" | "branch" | "fork") => void;
 }) {
   return (
-    <main className="flex-1 min-w-0 p-4 lg:p-8 space-y-8 overflow-y-auto">
+    <main className="flex-1 min-w-0 p-4 lg:p-8 space-y-6 overflow-y-auto">
       {/* 1. Welcome Hero Banner */}
-      <div className="relative rounded-2xl bg-gradient-to-r from-zinc-900 via-zinc-900 to-zinc-950 border border-zinc-800 p-6 lg:p-8 overflow-hidden shadow-xl">
-        <div className="absolute top-0 right-0 w-96 h-96 bg-emerald-500/10 rounded-full blur-3xl pointer-events-none" />
-        <div className="relative z-10 max-w-2xl space-y-3">
-          <div className="inline-flex items-center gap-2 px-2.5 py-1 rounded-full bg-emerald-500/10 border border-emerald-500/20 text-emerald-400 text-xs font-semibold">
-            <Sparkles className="w-3.5 h-3.5" />
-            <span>GitHub for Notes • Version Control Hub</span>
-          </div>
-
-          <h1 className="text-2xl lg:text-3xl font-extrabold text-zinc-100 tracking-tight">
+      <div className="relative rounded-2xl bg-gradient-to-r from-zinc-900 via-zinc-900 to-zinc-950 border border-zinc-800 p-5 lg:p-6 overflow-hidden shadow-xl">
+        <div className="absolute top-0 right-0 w-72 h-72 bg-emerald-500/8 rounded-full blur-3xl pointer-events-none" />
+        <div className="relative z-10 space-y-3">
+          <h1 className="text-xl lg:text-2xl font-extrabold text-zinc-100 tracking-tight">
             Welcome back, {user.username}
           </h1>
 
-          <p className="text-sm text-zinc-400 leading-relaxed">
-            Collaborate on modular notes with zero-conflict block locking, attempt branches, LexoRank ordering, and content-addressed storage (CAS).
-          </p>
-
           {/* Quick Action Buttons */}
-          <div className="flex flex-wrap items-center gap-2.5 pt-3">
+          <div className="flex flex-wrap items-center gap-2 pt-1">
             <button
               onClick={() => onOpenCreate("note")}
-              className="px-4 py-2 rounded-xl bg-emerald-500 hover:bg-emerald-400 text-zinc-950 text-xs font-bold transition-all shadow-md shadow-emerald-500/20 flex items-center gap-1.5 cursor-pointer"
+              className="px-3.5 py-1.5 rounded-xl bg-emerald-500 hover:bg-emerald-400 text-zinc-950 text-xs font-bold transition-all shadow-md shadow-emerald-500/20 flex items-center gap-1.5 cursor-pointer"
             >
-              <FilePlus className="w-4 h-4" />
+              <FilePlus className="w-3.5 h-3.5" />
               New Note
             </button>
 
             <button
               onClick={() => onOpenCreate("notebook")}
-              className="px-4 py-2 rounded-xl bg-zinc-800 hover:bg-zinc-700 text-zinc-200 text-xs font-semibold border border-zinc-700/60 transition-all flex items-center gap-1.5 cursor-pointer"
+              className="px-3.5 py-1.5 rounded-xl bg-zinc-800 hover:bg-zinc-700 text-zinc-200 text-xs font-semibold border border-zinc-700/60 transition-all flex items-center gap-1.5 cursor-pointer"
             >
-              <FolderPlus className="w-4 h-4 text-purple-400" />
+              <FolderPlus className="w-3.5 h-3.5 text-purple-400" />
               New Notebook
             </button>
 
             <button
-              onClick={() => onOpenCreate("issue")}
-              className="px-4 py-2 rounded-xl bg-zinc-800 hover:bg-zinc-700 text-zinc-200 text-xs font-semibold border border-zinc-700/60 transition-all flex items-center gap-1.5 cursor-pointer"
-            >
-              <CircleDot className="w-4 h-4 text-amber-400" />
-              New Issue
-            </button>
-
-            <button
               onClick={() => onOpenCreate("fork")}
-              className="px-4 py-2 rounded-xl bg-zinc-800 hover:bg-zinc-700 text-zinc-200 text-xs font-semibold border border-zinc-700/60 transition-all flex items-center gap-1.5 cursor-pointer"
+              className="px-3.5 py-1.5 rounded-xl bg-zinc-800 hover:bg-zinc-700 text-zinc-200 text-xs font-semibold border border-zinc-700/60 transition-all flex items-center gap-1.5 cursor-pointer"
             >
-              <GitFork className="w-4 h-4 text-cyan-400" />
+              <GitFork className="w-3.5 h-3.5 text-cyan-400" />
               Fork Note
             </button>
           </div>
         </div>
       </div>
 
-      {/* 2. Core Architecture Real Stat Badges */}
-      <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
-        <div className="p-4 rounded-2xl bg-zinc-900/70 border border-zinc-800/80 shadow-sm space-y-1.5 hover:border-emerald-500/30 transition-all">
+      {/* 2. Stat Cards */}
+      <div className="grid grid-cols-2 lg:grid-cols-4 gap-3">
+        <div className="p-3.5 rounded-2xl bg-zinc-900/70 border border-zinc-800/80 shadow-sm space-y-1 hover:border-emerald-500/30 transition-all">
           <div className="flex items-center justify-between text-zinc-400 text-xs">
-            <span className="font-medium text-[11px] uppercase tracking-wider">Total Notes</span>
+            <span className="font-medium text-[11px] uppercase tracking-wider">Notes</span>
             <div className="p-1.5 rounded-lg bg-emerald-500/10 text-emerald-400 border border-emerald-500/20">
               <BookOpen className="w-3.5 h-3.5" />
             </div>
           </div>
-          <div className="text-2xl font-bold text-zinc-100 font-mono tracking-tight">
-            {user.stats.notes_count} {user.stats.notes_count === 1 ? 'Note' : 'Notes'}
+          <div className="text-xl font-bold text-zinc-100 font-mono tracking-tight">
+            {user.stats.notes_count}
           </div>
-          <p className="text-[11px] text-zinc-500">Across {notebooks.length} collections</p>
+          <p className="text-[11px] text-zinc-500">Across {notebooks.length} notebooks</p>
         </div>
 
-        <div className="p-4 rounded-2xl bg-zinc-900/70 border border-zinc-800/80 shadow-sm space-y-1.5 hover:border-amber-500/30 transition-all">
+        <div className="p-3.5 rounded-2xl bg-zinc-900/70 border border-zinc-800/80 shadow-sm space-y-1 hover:border-amber-500/30 transition-all">
           <div className="flex items-center justify-between text-zinc-400 text-xs">
-            <span className="font-medium text-[11px] uppercase tracking-wider">Active Block Issues</span>
+            <span className="font-medium text-[11px] uppercase tracking-wider">Open Issues</span>
             <div className="p-1.5 rounded-lg bg-amber-500/10 text-amber-400 border border-amber-500/20">
               <CircleDot className="w-3.5 h-3.5" />
             </div>
           </div>
-          <div className="text-2xl font-bold text-zinc-100 font-mono tracking-tight">
-            {user.stats.issues_count} Open
+          <div className="text-xl font-bold text-zinc-100 font-mono tracking-tight">
+            {user.stats.issues_count}
           </div>
-          <p className="text-[11px] text-zinc-500">Zero-conflict slot locks</p>
+          <p className="text-[11px] text-zinc-500">Block-level tasks</p>
         </div>
 
-        <div className="p-4 rounded-2xl bg-zinc-900/70 border border-zinc-800/80 shadow-sm space-y-1.5 hover:border-blue-500/30 transition-all">
+        <div className="p-3.5 rounded-2xl bg-zinc-900/70 border border-zinc-800/80 shadow-sm space-y-1 hover:border-blue-500/30 transition-all">
           <div className="flex items-center justify-between text-zinc-400 text-xs">
-            <span className="font-medium text-[11px] uppercase tracking-wider">Commit Chain</span>
+            <span className="font-medium text-[11px] uppercase tracking-wider">Commits</span>
             <div className="p-1.5 rounded-lg bg-blue-500/10 text-blue-400 border border-blue-500/20">
               <GitCommit className="w-3.5 h-3.5" />
             </div>
           </div>
-          <div className="text-2xl font-bold text-zinc-100 font-mono tracking-tight">
-            {user.stats.commits_count} Commits
+          <div className="text-xl font-bold text-zinc-100 font-mono tracking-tight">
+            {user.stats.commits_count}
           </div>
-          <p className="text-[11px] text-zinc-500">Ternary manifests linked</p>
+          <p className="text-[11px] text-zinc-500">Version snapshots</p>
         </div>
 
-        <div className="p-4 rounded-2xl bg-zinc-900/70 border border-zinc-800/80 shadow-sm space-y-1.5 hover:border-purple-500/30 transition-all">
+        <div className="p-3.5 rounded-2xl bg-zinc-900/70 border border-zinc-800/80 shadow-sm space-y-1 hover:border-purple-500/30 transition-all">
           <div className="flex items-center justify-between text-zinc-400 text-xs">
-            <span className="font-medium text-[11px] uppercase tracking-wider">Storage Engine</span>
+            <span className="font-medium text-[11px] uppercase tracking-wider">Notebooks</span>
             <div className="p-1.5 rounded-lg bg-purple-500/10 text-purple-400 border border-purple-500/20">
-              <Database className="w-3.5 h-3.5" />
+              <Folder className="w-3.5 h-3.5" />
             </div>
           </div>
-          <div className="text-2xl font-bold text-emerald-400 font-mono tracking-tight">CAS SHA-256</div>
-          <p className="text-[11px] text-zinc-500">Zero-cost content addressed</p>
+          <div className="text-xl font-bold text-zinc-100 font-mono tracking-tight">{notebooks.length}</div>
+          <p className="text-[11px] text-zinc-500">Collections</p>
         </div>
       </div>
 
@@ -590,42 +573,7 @@ export function HomeFeed({
         />
       )}
 
-      {/* 4.7. Starred Quick Access Shelf */}
-      {starredItems && starredItems.length > 0 && (
-        <div className="space-y-3 p-4 rounded-2xl bg-amber-950/10 border border-amber-500/20">
-          <div className="flex items-center justify-between">
-            <div className="flex items-center gap-2 text-xs font-bold text-amber-300">
-              <Star className="w-4 h-4 text-amber-400 fill-amber-400" />
-              <span>Starred Notes & Workspaces</span>
-            </div>
-            <span className="text-[11px] font-mono text-zinc-500">{starredItems.length} Bookmarks</span>
-          </div>
 
-          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3">
-            {starredItems.map((st) => (
-              <Link
-                key={st.resource_id}
-                href={
-                  st.resource_type === 'NOTE' && st.notebook_id
-                    ? `/dashboard/notebooks/${st.notebook_id}/notes/${st.resource_id}`
-                    : `/dashboard/notebooks/${st.resource_id}`
-                }
-                className="p-3 rounded-xl bg-zinc-900/80 border border-zinc-800 hover:border-amber-500/40 transition-all flex items-center justify-between gap-2 group"
-              >
-                <div className="min-w-0 space-y-0.5">
-                  <div className="text-xs font-semibold text-zinc-200 group-hover:text-amber-300 truncate">
-                    {st.title}
-                  </div>
-                  <div className="text-[10px] text-zinc-500 font-mono">
-                    {st.resource_type === 'NOTE' ? `Note in ${st.notebook_title || 'notebook'}` : 'Notebook'}
-                  </div>
-                </div>
-                <ArrowRight className="w-3.5 h-3.5 text-zinc-500 group-hover:text-amber-400 shrink-0" />
-              </Link>
-            ))}
-          </div>
-        </div>
-      )}
 
       {/* 5. Workspaces & Modular Notes Explorer */}
       <div className="space-y-4">
@@ -802,7 +750,7 @@ export function ProfileModal({
   onClose: () => void;
 }) {
   const router = useRouter();
-  const [activeTab, setActiveTab] = useState<"profile" | "permissions" | "storage" | "keys">("profile");
+  const [activeTab, setActiveTab] = useState<"profile" | "permissions">("profile");
   const [copiedUuid, setCopiedUuid] = useState(false);
 
   const userUuid = user.user_id || (user as any).id || '';
@@ -848,8 +796,8 @@ export function ProfileModal({
               <UserIcon className="w-5 h-5" />
             </div>
             <div>
-              <h2 className="text-base font-bold text-zinc-100">Profile Settings & Workspace</h2>
-              <p className="text-xs text-zinc-400">Manage account, collaborative roles & storage</p>
+              <h2 className="text-base font-bold text-zinc-100">Profile</h2>
+              <p className="text-xs text-zinc-400">Account & collaboration settings</p>
             </div>
           </div>
           <button
@@ -860,7 +808,6 @@ export function ProfileModal({
           </button>
         </div>
 
-        {/* Navigation Tabs */}
         <div className="flex border-b border-zinc-800 px-6 bg-zinc-950/30 gap-6 text-xs font-semibold">
           <button
             onClick={() => setActiveTab("profile")}
@@ -883,28 +830,6 @@ export function ProfileModal({
           >
             <Shield className="w-3.5 h-3.5" />
             Roles & Capabilities
-          </button>
-          <button
-            onClick={() => setActiveTab("storage")}
-            className={`py-3 border-b-2 transition-colors cursor-pointer flex items-center gap-2 ${
-              activeTab === "storage"
-                ? "border-emerald-400 text-emerald-400"
-                : "border-transparent text-zinc-400 hover:text-zinc-200"
-            }`}
-          >
-            <Database className="w-3.5 h-3.5" />
-            Storage & CAS
-          </button>
-          <button
-            onClick={() => setActiveTab("keys")}
-            className={`py-3 border-b-2 transition-colors cursor-pointer flex items-center gap-2 ${
-              activeTab === "keys"
-                ? "border-emerald-400 text-emerald-400"
-                : "border-transparent text-zinc-400 hover:text-zinc-200"
-            }`}
-          >
-            <Key className="w-3.5 h-3.5" />
-            API & Security
           </button>
         </div>
 
@@ -933,26 +858,6 @@ export function ProfileModal({
                     </span>
                   </div>
                   <p className="text-xs text-zinc-400 font-mono">@{user.username} • {user.email}</p>
-                  <p className="text-xs text-zinc-300 pt-1">Collaborative author on BookWorm CAS platform</p>
-                  
-                  {/* User UUID Badge */}
-                  {userUuid && (
-                    <div className="flex items-center gap-2 pt-1.5 flex-wrap">
-                      <span className="text-[11px] font-mono text-zinc-300 bg-zinc-900/90 px-2.5 py-1 rounded-lg border border-zinc-800 flex items-center gap-1.5">
-                        <span className="text-zinc-500 font-sans text-[10px]">UUID:</span>
-                        <span>{userUuid}</span>
-                      </span>
-                      <button
-                        type="button"
-                        onClick={() => handleCopyUuid(userUuid)}
-                        className="px-2.5 py-1 rounded-lg bg-zinc-800 hover:bg-zinc-750 text-zinc-300 hover:text-emerald-400 text-[11px] font-mono flex items-center gap-1.5 transition-colors cursor-pointer border border-zinc-700/60"
-                        title="Copy your UUID to receive invites"
-                      >
-                        {copiedUuid ? <Check className="w-3.5 h-3.5 text-emerald-400" /> : <Copy className="w-3.5 h-3.5" />}
-                        <span>{copiedUuid ? "Copied!" : "Copy"}</span>
-                      </button>
-                    </div>
-                  )}
                 </div>
               </div>
 
@@ -1086,59 +991,6 @@ export function ProfileModal({
             </div>
           )}
 
-          {activeTab === "storage" && (
-            <div className="space-y-4 text-xs">
-              <div className="p-4 rounded-xl bg-blue-950/20 border border-blue-500/20">
-                <div className="flex items-center gap-2 text-blue-400 font-semibold mb-1">
-                  <Database className="w-4 h-4" />
-                  Content-Addressed Storage & Zero-Cost Deduplication
-                </div>
-                <p className="text-zinc-300">
-                  BookWorm stores text blobs by SHA-256 hash. When notes are forked or edited, unchanged blocks share existing content blobs.
-                </p>
-              </div>
-
-              <div className="grid grid-cols-3 gap-3">
-                <div className="p-3 rounded-lg bg-zinc-950/40 border border-zinc-800">
-                  <span className="text-zinc-400 text-[11px]">Unique Content Blobs</span>
-                  <div className="text-lg font-bold text-zinc-100 font-mono mt-1">248 Blobs</div>
-                </div>
-                <div className="p-3 rounded-lg bg-zinc-950/40 border border-zinc-800">
-                  <span className="text-zinc-400 text-[11px]">Slot References</span>
-                  <div className="text-lg font-bold text-zinc-100 font-mono mt-1">1,420 Slots</div>
-                </div>
-                <div className="p-3 rounded-lg bg-zinc-950/40 border border-zinc-800">
-                  <span className="text-zinc-400 text-[11px]">Storage Efficiency</span>
-                  <div className="text-lg font-bold text-emerald-400 font-mono mt-1">82.5% saved</div>
-                </div>
-              </div>
-            </div>
-          )}
-
-          {activeTab === "keys" && (
-            <div className="space-y-4 text-xs">
-              <div className="p-4 rounded-xl bg-zinc-950/60 border border-zinc-800 space-y-2">
-                <div className="flex items-center justify-between">
-                  <span className="font-semibold text-zinc-200">Local Personal Access Token</span>
-                  <span className="text-[10px] text-zinc-500 font-mono">Expires in 90 days</span>
-                </div>
-                <div className="flex items-center gap-2">
-                  <input
-                    type="password"
-                    readOnly
-                    value="bw_pat_9a87f6e5d4c3b2a10011223344"
-                    className="flex-1 px-3 py-1.5 rounded-lg bg-zinc-900 border border-zinc-800 font-mono text-zinc-300 text-xs"
-                  />
-                  <button
-                    onClick={() => alert("Copied PAT to clipboard!")}
-                    className="px-3 py-1.5 rounded-lg bg-zinc-800 hover:bg-zinc-700 text-zinc-200 font-medium cursor-pointer"
-                  >
-                    Copy
-                  </button>
-                </div>
-              </div>
-            </div>
-          )}
         </div>
 
         {/* Footer Actions */}

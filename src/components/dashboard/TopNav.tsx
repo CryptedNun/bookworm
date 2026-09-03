@@ -17,10 +17,6 @@ import {
   ShieldCheck,
   LogOut,
   Users,
-  Compass,
-  GraduationCap,
-  Copy,
-  Check,
 } from "lucide-react";
 import NotificationsDropdown from "@/components/notifications/NotificationsDropdown";
 import RoleAuditorModal from "@/components/dashboard/RoleAuditorModal";
@@ -42,13 +38,11 @@ interface TopNavProps {
 
 export function TopNav({ userId = "", currentUser, onOpenCreate }: TopNavProps) {
   const router = useRouter();
-  const [searchQuery, setSearchQuery] = useState("");
   const [showPlusMenu, setShowPlusMenu] = useState(false);
   const [showRoleMenu, setShowRoleMenu] = useState(false);
   const [isAuditorOpen, setIsAuditorOpen] = useState(false);
   const [isSwitchingRole, setIsSwitchingRole] = useState(false);
   const [isPaletteOpen, setIsPaletteOpen] = useState(false);
-  const [copiedNavUuid, setCopiedNavUuid] = useState(false);
 
   // Global Ctrl+K shortcut listener
   React.useEffect(() => {
@@ -109,9 +103,6 @@ export function TopNav({ userId = "", currentUser, onOpenCreate }: TopNavProps) 
             >
               <CircleDot className="w-3.5 h-3.5 text-emerald-400" />
               <span>Issues</span>
-              <span className="ml-1 px-1.5 py-0.2 rounded-full bg-emerald-500/10 text-emerald-400 text-[11px] font-mono border border-emerald-500/20">
-                3
-              </span>
             </button>
 
             <button
@@ -119,10 +110,7 @@ export function TopNav({ userId = "", currentUser, onOpenCreate }: TopNavProps) 
               className="flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg hover:bg-zinc-900 hover:text-zinc-100 transition-colors text-xs font-semibold cursor-pointer"
             >
               <GitPullRequest className="w-3.5 h-3.5 text-blue-400" />
-              <span>Pull Requests & Merges</span>
-              <span className="ml-1 px-1.5 py-0.2 rounded-full bg-blue-500/10 text-blue-400 text-[11px] font-mono border border-blue-500/20">
-                2
-              </span>
+              <span>Branches</span>
             </button>
 
             <button
@@ -133,22 +121,7 @@ export function TopNav({ userId = "", currentUser, onOpenCreate }: TopNavProps) 
               <span>Notebooks</span>
             </button>
 
-            <Link
-              href="/explore"
-              className="flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg hover:bg-zinc-900 hover:text-zinc-100 transition-colors text-xs font-semibold"
-            >
-              <Compass className="w-3.5 h-3.5 text-amber-400" />
-              <span>Explore</span>
-            </Link>
 
-            <Link
-              href="/evaluation"
-              className="flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg hover:bg-zinc-900 hover:text-zinc-100 transition-colors text-xs font-semibold"
-              title="System Architecture & Database Evaluation Showcase"
-            >
-              <GraduationCap className="w-3.5 h-3.5 text-emerald-400" />
-              <span>Evaluation</span>
-            </Link>
           </nav>
         </div>
 
@@ -272,28 +245,17 @@ export function TopNav({ userId = "", currentUser, onOpenCreate }: TopNavProps) 
             )}
           </div>
 
-          {/* BUET CSE 216 Evaluation Audit Button */}
-          <button
-            onClick={() => setIsAuditorOpen(true)}
-            className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-emerald-500/10 hover:bg-emerald-500/20 text-emerald-400 border border-emerald-500/30 text-xs font-semibold transition-all cursor-pointer shadow-sm"
-            title="Run BUET CSE 216 REST & Authorization Audit"
-          >
-            <ShieldCheck className="w-3.5 h-3.5 text-emerald-400" />
-            <span className="hidden sm:inline">Evaluation Audit</span>
-          </button>
+
 
           {/* Role Switcher Menu */}
           <div className="relative">
             <button
               onClick={() => setShowRoleMenu(!showRoleMenu)}
               className="flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg bg-zinc-900 hover:bg-zinc-850 border border-zinc-800 text-zinc-300 text-xs font-medium cursor-pointer"
-              title="Switch authenticated user role"
+              title="Switch authenticated user"
             >
               <Users className="w-3.5 h-3.5 text-purple-400" />
               <span className="font-mono text-[11px] text-zinc-200">@{currentUser?.username || "alice"}</span>
-              <span className="px-1.5 py-0.2 rounded text-[9px] font-mono bg-purple-500/15 text-purple-300 border border-purple-500/30">
-                {currentUser?.system_role || "ADMIN"}
-              </span>
               <ChevronDown className="w-3 h-3 text-zinc-500" />
             </button>
 
@@ -306,33 +268,7 @@ export function TopNav({ userId = "", currentUser, onOpenCreate }: TopNavProps) 
                     <div className="text-[10px] text-zinc-500">Test role-level capabilities from clean state</div>
                   </div>
 
-                  {/* Your User UUID */}
-                  {(currentUser?.user_id || userId) && (
-                    <div className="px-3 py-2 bg-zinc-950/60 space-y-1">
-                      <div className="flex items-center justify-between text-[10px] text-zinc-400">
-                        <span>Your User ID (UUID)</span>
-                        <button
-                          type="button"
-                          onClick={() => {
-                            const id = currentUser?.user_id || userId || '';
-                            if (id && typeof window !== 'undefined') {
-                              navigator.clipboard.writeText(id);
-                              setCopiedNavUuid(true);
-                              setTimeout(() => setCopiedNavUuid(false), 2000);
-                            }
-                          }}
-                          className="text-emerald-400 hover:text-emerald-300 font-mono flex items-center gap-1 cursor-pointer"
-                          title="Copy your UUID to receive invites"
-                        >
-                          {copiedNavUuid ? <Check className="w-3 h-3 text-emerald-400" /> : <Copy className="w-3 h-3" />}
-                          <span>{copiedNavUuid ? "Copied!" : "Copy"}</span>
-                        </button>
-                      </div>
-                      <div className="font-mono text-[10px] text-zinc-300 bg-zinc-900 px-1.5 py-0.5 rounded border border-zinc-800 truncate select-all">
-                        {currentUser?.user_id || userId}
-                      </div>
-                    </div>
-                  )}
+
 
                   <div className="py-1">
                     {[
@@ -358,7 +294,21 @@ export function TopNav({ userId = "", currentUser, onOpenCreate }: TopNavProps) 
                     ))}
                   </div>
 
-                  <div className="p-1.5">
+                  <div className="p-1.5 space-y-1">
+                    <button
+                      onClick={() => {
+                        setShowRoleMenu(false);
+                        setIsAuditorOpen(true);
+                      }}
+                      className="w-full px-3 py-1.5 rounded-lg hover:bg-emerald-950/30 text-emerald-400 hover:text-emerald-300 flex items-center justify-between text-xs transition-colors cursor-pointer"
+                    >
+                      <span className="flex items-center gap-2">
+                        <ShieldCheck className="w-3.5 h-3.5" />
+                        <span>Run Evaluation Audit</span>
+                      </span>
+                      <span className="text-[9px] font-mono text-zinc-500">CSE 216</span>
+                    </button>
+
                     <button
                       onClick={handleLogout}
                       className="w-full px-3 py-1.5 rounded-lg hover:bg-red-950/30 text-red-400 hover:text-red-300 flex items-center gap-2 text-xs transition-colors cursor-pointer"

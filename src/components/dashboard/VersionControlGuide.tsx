@@ -18,7 +18,7 @@ import {
 } from 'lucide-react';
 
 export default function VersionControlGuide() {
-  const [isExpanded, setIsExpanded] = useState(true);
+  const [isExpanded, setIsExpanded] = useState(false);
   const [activeTab, setActiveTab] = useState<'locking' | 'branching' | 'merging' | 'forking'>('locking');
 
   const concepts = [

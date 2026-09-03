@@ -19,7 +19,6 @@ import {
   FileText,
   Clock,
   Lock,
-  Sparkles,
 } from 'lucide-react';
 import ForkNoteButton from '@/components/notes/ForkNoteButton';
 import PublishEditionButton from '@/components/notes/PublishEditionButton';
@@ -205,16 +204,6 @@ export default async function NoteDetailPage({ params }: PageProps) {
               {note.title}
             </h1>
 
-            {/* In-context Version Control Explainer Callout */}
-            <div className="p-3.5 rounded-xl bg-zinc-900/60 border border-zinc-800 text-xs text-zinc-400 flex items-start gap-2.5">
-              <Sparkles className="w-4 h-4 text-emerald-400 shrink-0 mt-0.5" />
-              <div className="space-y-0.5">
-                <span className="font-semibold text-zinc-200">Collaborative Block Level Versioning: </span>
-                <span>
-                  Hover over any individual block below to <strong>propose an edit via a block issue</strong>, or click <strong>Fork</strong> above to copy this note into your own notebook at zero storage cost!
-                </span>
-              </div>
-            </div>
           </div>
 
           {/* Blocks Viewer with History & Hierarchy */}
