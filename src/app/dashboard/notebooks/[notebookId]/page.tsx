@@ -21,7 +21,7 @@ export default async function NotebookPage({ params }: PageProps) {
   // Authenticate
   const user = await getCurrentUser();
   if (!user) {
-    redirect('/');
+    redirect('/?session=expired');
   }
 
   // Await params (Next.js 15+ requirement)

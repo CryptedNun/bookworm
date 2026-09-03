@@ -17,7 +17,7 @@ interface PageProps {
 export default async function BranchesPage({ params }: PageProps) {
   const user = await getCurrentUser();
   if (!user) {
-    redirect('/');
+    redirect('/?session=expired');
   }
 
   const { notebookId, noteId } = await params;

@@ -31,8 +31,11 @@
   - [x] Granular role levels: `OWNER`, `MAINTAINER`, `CONTRIBUTOR`.
   - [x] Capability overrides via JSONB (`can_create_issue`, `can_merge_branch`, `can_delete_branch`, `can_add_contributor`).
   - [x] Role management interface with permission auditing.
-- [x] **Access Request System (`access_requests`)**:
+- [x] **Access Request & Invitation System (`access_requests`, `collaborator_roles`)**:
   - [x] Bidirectional request model (`REQUEST` by prospective collaborator, `INVITE` by maintainer).
+  - [x] Direct collaborator invitations by **Email Address**, **BookWorm User UUID**, or **Username**.
+  - [x] Visible User UUID in Profile Tab & TopNav with 1-click clipboard copy for seamless sharing.
+  - [x] Direct Note-level & Notebook-level collaborator invitation modals (`InviteNoteModal`, `PermissionsManager`).
   - [x] Audit lifecycle states: `PENDING`, `APPROVED`, `REJECTED`, `CANCELLED`.
   - [x] Review workflow updating `collaborator_roles` automatically.
 - [x] **Notification Hub (`notifications`)**:

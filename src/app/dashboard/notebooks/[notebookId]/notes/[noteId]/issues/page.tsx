@@ -17,7 +17,7 @@ interface PageProps {
 export default async function IssuesPage({ params, searchParams }: PageProps) {
   const user = await getCurrentUser();
   if (!user) {
-    redirect('/');
+    redirect('/?session=expired');
   }
 
   const { notebookId, noteId } = await params;

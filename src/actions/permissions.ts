@@ -396,7 +396,8 @@ export async function getMyAccessRequests(userId: string) {
 }
 
 /**
- * Add collaborator directly (by owner/maintainer)
+ * Add / Invite collaborator directly (by owner/maintainer)
+ * Supports userEmail as an email address, UUID, or username
  */
 export async function addCollaborator(input: {
   resourceId: string;
@@ -410,24 +411,54 @@ export async function addCollaborator(input: {
     // Verify grantor has permission
     const grantorRole = await getUserRole(resourceId, grantedBy);
     if (!grantorRole || !['OWNER', 'MAINTAINER'].includes(grantorRole.role)) {
-      return { success: false, error: 'Insufficient permissions to add collaborators' };
+      return { success: false, error: 'Insufficient permissions to invite collaborators' };
     }
 
-    // Find user by email
-    const [targetUser] = await sql`
-      SELECT user_id, username, email
-      FROM users
-      WHERE email = ${userEmail}
-    `;
+    const trimmedIdentifier = (userEmail || '').trim();
+    if (!trimmedIdentifier) {
+      return { success: false, error: 'Please enter a valid user email or UUID' };
+    }
+
+    // Check if identifier is a UUID
+    const isUuid = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(trimmedIdentifier);
+    let targetUser: { user_id: string; username: string; email: string } | undefined;
+
+    if (isUuid) {
+      const [userByUuid] = await sql`
+        SELECT user_id, username, email
+        FROM users
+        WHERE user_id = ${trimmedIdentifier}
+      `;
+      targetUser = userByUuid as any;
+    } else {
+      const [userByEmailOrUsername] = await sql`
+        SELECT user_id, username, email
+        FROM users
+        WHERE LOWER(email) = LOWER(${trimmedIdentifier})
+           OR LOWER(username) = LOWER(${trimmedIdentifier})
+      `;
+      targetUser = userByEmailOrUsername as any;
+    }
 
     if (!targetUser) {
-      return { success: false, error: 'User not found with that email' };
+      return { 
+        success: false, 
+        error: `User not found with identifier "${trimmedIdentifier}". Please check the email address or UUID.` 
+      };
+    }
+
+    // Prevent adding self
+    if (targetUser.user_id === grantedBy) {
+      return { success: false, error: 'You already own or maintain this resource' };
     }
 
     // Check if user already has access
     const existingRole = await getUserRole(resourceId, targetUser.user_id);
     if (existingRole) {
-      return { success: false, error: 'User already has access to this resource' };
+      return { 
+        success: false, 
+        error: `User @${targetUser.username} already has access as ${existingRole.role}` 
+      };
     }
 
     // Grant access
@@ -489,6 +520,11 @@ export async function addCollaborator(input: {
     };
   }
 }
+
+/**
+ * Alias for inviting/adding a collaborator
+ */
+export const inviteCollaborator = addCollaborator;
 
 /**
  * Remove collaborator (by owner)

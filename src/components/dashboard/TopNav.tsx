@@ -19,6 +19,8 @@ import {
   Users,
   Compass,
   GraduationCap,
+  Copy,
+  Check,
 } from "lucide-react";
 import NotificationsDropdown from "@/components/notifications/NotificationsDropdown";
 import RoleAuditorModal from "@/components/dashboard/RoleAuditorModal";
@@ -46,6 +48,7 @@ export function TopNav({ userId = "", currentUser, onOpenCreate }: TopNavProps) 
   const [isAuditorOpen, setIsAuditorOpen] = useState(false);
   const [isSwitchingRole, setIsSwitchingRole] = useState(false);
   const [isPaletteOpen, setIsPaletteOpen] = useState(false);
+  const [copiedNavUuid, setCopiedNavUuid] = useState(false);
 
   // Global Ctrl+K shortcut listener
   React.useEffect(() => {
@@ -302,6 +305,34 @@ export function TopNav({ userId = "", currentUser, onOpenCreate }: TopNavProps) 
                     <div className="font-semibold text-zinc-200">Evaluation Role Switcher</div>
                     <div className="text-[10px] text-zinc-500">Test role-level capabilities from clean state</div>
                   </div>
+
+                  {/* Your User UUID */}
+                  {(currentUser?.user_id || userId) && (
+                    <div className="px-3 py-2 bg-zinc-950/60 space-y-1">
+                      <div className="flex items-center justify-between text-[10px] text-zinc-400">
+                        <span>Your User ID (UUID)</span>
+                        <button
+                          type="button"
+                          onClick={() => {
+                            const id = currentUser?.user_id || userId || '';
+                            if (id && typeof window !== 'undefined') {
+                              navigator.clipboard.writeText(id);
+                              setCopiedNavUuid(true);
+                              setTimeout(() => setCopiedNavUuid(false), 2000);
+                            }
+                          }}
+                          className="text-emerald-400 hover:text-emerald-300 font-mono flex items-center gap-1 cursor-pointer"
+                          title="Copy your UUID to receive invites"
+                        >
+                          {copiedNavUuid ? <Check className="w-3 h-3 text-emerald-400" /> : <Copy className="w-3 h-3" />}
+                          <span>{copiedNavUuid ? "Copied!" : "Copy"}</span>
+                        </button>
+                      </div>
+                      <div className="font-mono text-[10px] text-zinc-300 bg-zinc-900 px-1.5 py-0.5 rounded border border-zinc-800 truncate select-all">
+                        {currentUser?.user_id || userId}
+                      </div>
+                    </div>
+                  )}
 
                   <div className="py-1">
                     {[

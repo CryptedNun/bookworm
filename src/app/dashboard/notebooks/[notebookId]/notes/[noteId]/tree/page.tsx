@@ -23,7 +23,7 @@ interface PageProps {
 export default async function TreePage({ params }: PageProps) {
   const user = await getCurrentUser();
   if (!user) {
-    redirect('/');
+    redirect('/?session=expired');
   }
 
   const { notebookId, noteId } = await params;

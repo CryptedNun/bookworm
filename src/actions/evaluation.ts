@@ -121,7 +121,10 @@ export async function auditDatabaseConstraints(): Promise<{
     const triggers = await sql`
       SELECT trigger_name, event_manipulation, event_object_table
       FROM information_schema.triggers
-      WHERE trigger_name IN ('trg_check_notebook_isa', 'trg_check_note_isa')
+      WHERE trigger_name IN (
+        'trg_check_notebook_isa', 'trg_check_note_isa',
+        'trg_notebooks_resource_type', 'trg_notes_resource_type'
+      )
     ` as any[];
 
     // 2. Audit Partial Unique Index on Issues
@@ -135,7 +138,7 @@ export async function auditDatabaseConstraints(): Promise<{
     const constraints = await sql`
       SELECT conname, pg_get_constraintdef(oid) as def
       FROM pg_constraint
-      WHERE conname = 'chk_branch_type'
+      WHERE conname IN ('chk_branch_type', 'chk_main_xor_attempt')
     ` as any[];
 
     const isaEnforcement = triggers.length >= 2;

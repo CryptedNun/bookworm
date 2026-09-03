@@ -17,9 +17,9 @@ export default async function DashboardPage() {
   // Fetch current user with stats (Server Component - direct DB query)
   const user = await getCurrentUserWithStats();
 
-  // Middleware should prevent this, but double-check
+  // Middleware should prevent this, but if user no longer exists in DB, purge session
   if (!user) {
-    redirect('/');
+    redirect('/?session=expired');
   }
 
   // Fetch user's notebooks

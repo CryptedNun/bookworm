@@ -39,6 +39,13 @@ export function middleware(request: NextRequest) {
     pathname === route
   );
 
+  // If redirected because session is invalid/expired, purge stale cookie and stay on landing
+  if (isAuthRoute && request.nextUrl.searchParams.get('session') === 'expired') {
+    const response = NextResponse.next();
+    response.cookies.delete('session_user_id');
+    return response;
+  }
+
   // Redirect to landing if trying to access protected route without auth
   if (isProtectedRoute && !isAuthenticated) {
     const url = request.nextUrl.clone();

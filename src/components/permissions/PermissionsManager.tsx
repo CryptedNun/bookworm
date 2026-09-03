@@ -14,6 +14,7 @@ import {
   Edit,
   Clock,
   AlertCircle,
+  Copy,
 } from 'lucide-react';
 import {
   addCollaborator,
@@ -71,6 +72,15 @@ export default function PermissionsManager({
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [success, setSuccess] = useState<string | null>(null);
+  const [copiedId, setCopiedId] = useState<string | null>(null);
+
+  const handleCopyId = (id: string) => {
+    if (typeof window !== 'undefined' && id) {
+      navigator.clipboard.writeText(id);
+      setCopiedId(id);
+      setTimeout(() => setCopiedId(null), 2000);
+    }
+  };
 
   const canManageCollaborators = ['OWNER', 'MAINTAINER'].includes(currentUserRole);
   const canRemoveCollaborators = currentUserRole === 'OWNER';
@@ -258,10 +268,10 @@ export default function PermissionsManager({
           {canManageCollaborators && (
             <button
               onClick={() => setShowAddForm(!showAddForm)}
-              className="px-4 py-2 rounded-lg bg-emerald-500 hover:bg-emerald-400 text-zinc-950 text-sm font-medium transition-colors flex items-center gap-2"
+              className="px-4 py-2 rounded-lg bg-emerald-500 hover:bg-emerald-400 text-zinc-950 text-sm font-semibold transition-colors flex items-center gap-2 shadow-sm"
             >
               <UserPlus className="w-4 h-4" />
-              Add Collaborator
+              Invite Collaborator
             </button>
           )}
         </div>
@@ -281,45 +291,63 @@ export default function PermissionsManager({
           </div>
         )}
 
-        {/* Add Collaborator Form */}
+        {/* Invite Collaborator Form */}
         {showAddForm && (
-          <form onSubmit={handleAddCollaborator} className="mt-4 p-4 rounded-lg bg-zinc-800 border border-zinc-700">
+          <form onSubmit={handleAddCollaborator} className="mt-4 p-4 rounded-xl bg-zinc-800/90 border border-zinc-700 shadow-xl space-y-4">
+            <div className="border-b border-zinc-700/80 pb-2">
+              <h3 className="text-sm font-bold text-zinc-100 flex items-center gap-2">
+                <UserPlus className="w-4 h-4 text-emerald-400" />
+                Invite Collaborator to this {resourceType === 'NOTEBOOK' ? 'Notebook' : 'Note'}
+              </h3>
+              <p className="text-xs text-zinc-400 mt-0.5">
+                Grant contributor or maintainer access via their email address, username, or BookWorm User UUID.
+              </p>
+            </div>
+
             <div className="space-y-3">
               <div>
-                <label className="block text-sm font-medium text-zinc-300 mb-2">
-                  User Email
+                <label className="block text-xs font-semibold text-zinc-300 mb-1">
+                  User Email or User ID (UUID)
                 </label>
                 <input
-                  type="email"
+                  type="text"
                   value={addEmail}
                   onChange={(e) => setAddEmail(e.target.value)}
-                  placeholder="user@example.com"
+                  placeholder="e.g. user@bookworm.dev or 550e8400-e29b-41d4-a716-446655440000"
                   required
-                  className="w-full px-3 py-2 rounded-lg bg-zinc-900 border border-zinc-700 text-zinc-100 placeholder-zinc-500 focus:outline-none focus:ring-2 focus:ring-emerald-500"
+                  className="w-full px-3 py-2 text-xs rounded-lg bg-zinc-900 border border-zinc-700 text-zinc-100 placeholder-zinc-500 focus:outline-none focus:ring-2 focus:ring-emerald-500 font-mono"
                 />
+                <p className="text-[11px] text-zinc-500 mt-1">
+                  Users can find their unique UUID in their Profile tab (top-left profile icon on dashboard).
+                </p>
               </div>
 
               <div>
-                <label className="block text-sm font-medium text-zinc-300 mb-2">
-                  Role
+                <label className="block text-xs font-semibold text-zinc-300 mb-1">
+                  Collaborator Role & Permissions
                 </label>
                 <select
                   value={addRole}
                   onChange={(e) => setAddRole(e.target.value as 'MAINTAINER' | 'CONTRIBUTOR')}
-                  className="w-full px-3 py-2 rounded-lg bg-zinc-900 border border-zinc-700 text-zinc-100 focus:outline-none focus:ring-2 focus:ring-emerald-500"
+                  className="w-full px-3 py-2 text-xs rounded-lg bg-zinc-900 border border-zinc-700 text-zinc-100 focus:outline-none focus:ring-2 focus:ring-emerald-500"
                 >
-                  <option value="CONTRIBUTOR">Contributor (can edit via issues)</option>
-                  <option value="MAINTAINER">Maintainer (can edit directly, merge branches)</option>
+                  <option value="CONTRIBUTOR">
+                    Contributor (Read access + create issues & propose block changes via attempt branches)
+                  </option>
+                  <option value="MAINTAINER">
+                    Maintainer (Direct edit rights, review & merge branches, invite contributors)
+                  </option>
                 </select>
               </div>
 
-              <div className="flex items-center gap-2">
+              <div className="flex items-center gap-2 pt-1">
                 <button
                   type="submit"
                   disabled={loading}
-                  className="px-4 py-2 rounded-lg bg-emerald-500 hover:bg-emerald-400 text-zinc-950 text-sm font-medium transition-colors disabled:opacity-50"
+                  className="px-4 py-2 rounded-lg bg-emerald-500 hover:bg-emerald-400 text-zinc-950 text-xs font-bold transition-colors disabled:opacity-50 flex items-center gap-1.5"
                 >
-                  {loading ? 'Adding...' : 'Add'}
+                  <UserPlus className="w-3.5 h-3.5" />
+                  <span>{loading ? 'Sending Invite...' : 'Send Invite / Add'}</span>
                 </button>
                 <button
                   type="button"
@@ -327,7 +355,7 @@ export default function PermissionsManager({
                     setShowAddForm(false);
                     setAddEmail('');
                   }}
-                  className="px-4 py-2 rounded-lg bg-zinc-700 hover:bg-zinc-600 text-zinc-200 text-sm font-medium transition-colors"
+                  className="px-3.5 py-2 rounded-lg bg-zinc-700 hover:bg-zinc-600 text-zinc-200 text-xs font-medium transition-colors"
                 >
                   Cancel
                 </button>
@@ -401,7 +429,25 @@ export default function PermissionsManager({
                             )}
                           </p>
                         </div>
-                        <p className="text-xs text-zinc-400">{collaborator.email}</p>
+                        <div className="flex items-center gap-2 text-xs text-zinc-400 flex-wrap">
+                          <span>{collaborator.email}</span>
+                          <span className="text-zinc-600">•</span>
+                          <span className="font-mono text-[11px] text-zinc-500">
+                            ID: {collaborator.user_id.substring(0, 8)}...
+                          </span>
+                          <button
+                            type="button"
+                            onClick={() => handleCopyId(collaborator.user_id)}
+                            className="text-[10px] text-zinc-500 hover:text-emerald-400 transition-colors flex items-center gap-0.5 cursor-pointer"
+                            title="Copy user UUID"
+                          >
+                            {copiedId === collaborator.user_id ? (
+                              <Check className="w-3 h-3 text-emerald-400" />
+                            ) : (
+                              <Copy className="w-3 h-3" />
+                            )}
+                          </button>
+                        </div>
                       </div>
                     </div>
 

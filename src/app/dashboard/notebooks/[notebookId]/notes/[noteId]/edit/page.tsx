@@ -21,7 +21,7 @@ export default async function NoteEditPage({ params, searchParams }: PageProps) 
   // Authenticate
   const user = await getCurrentUser();
   if (!user) {
-    redirect('/');
+    redirect('/?session=expired');
   }
 
   // Await params

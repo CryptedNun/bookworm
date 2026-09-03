@@ -29,6 +29,7 @@ import { BookMarked } from 'lucide-react';
 import StarButton from '@/components/notes/StarButton';
 import NoteBlocksViewer from '@/components/notes/NoteBlocksViewer';
 import { isResourceStarred } from '@/actions/stars';
+import InviteNoteButton from '@/components/notes/InviteNoteButton';
 
 interface PageProps {
   params: Promise<{
@@ -40,7 +41,7 @@ interface PageProps {
 export default async function NoteDetailPage({ params }: PageProps) {
   const user = await getCurrentUser();
   if (!user) {
-    redirect('/');
+    redirect('/?session=expired');
   }
 
   const { notebookId, noteId } = await params;
@@ -113,6 +114,13 @@ export default async function NoteDetailPage({ params }: PageProps) {
               noteTitle={note.title}
               userId={user.user_id}
               userNotebooks={userNotebooks}
+            />
+
+            <InviteNoteButton
+              noteId={note.note_id}
+              noteTitle={note.title}
+              currentUserId={user.user_id}
+              currentUserRole={note.role_type as any}
             />
 
             {/* VCS Actions Group */}
