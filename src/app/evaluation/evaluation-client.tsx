@@ -17,6 +17,7 @@ import {
   Lock,
   GitFork,
   BookOpen,
+  Home,
 } from 'lucide-react';
 import type { EvaluationMetrics, ConstraintAuditResult } from '@/actions/evaluation';
 
@@ -56,10 +57,10 @@ export default function EvaluationClient({ metrics, audit }: EvaluationClientPro
           <div className="flex items-center gap-3">
             <Link
               href="/dashboard"
-              className="px-3.5 py-1.5 rounded-lg bg-zinc-800 hover:bg-zinc-700 text-zinc-200 text-xs font-semibold border border-zinc-700/60 transition-colors flex items-center gap-1.5"
+              className="px-3.5 py-1.5 rounded-xl bg-zinc-800 hover:bg-zinc-700 text-zinc-200 text-xs font-semibold border border-zinc-700/60 transition-colors flex items-center gap-1.5 shadow-sm"
             >
-              <span>Back to App</span>
-              <ArrowRight className="w-3.5 h-3.5" />
+              <Home className="w-3.5 h-3.5 text-emerald-400" />
+              <span>Dashboard</span>
             </Link>
           </div>
         </div>

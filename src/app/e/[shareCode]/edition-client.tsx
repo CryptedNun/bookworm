@@ -14,7 +14,8 @@ import {
   GitCommit,
   ShieldCheck,
   ExternalLink,
-  Layers
+  Layers,
+  Home,
 } from 'lucide-react';
 import type { PublicEditionData } from '@/actions/editions';
 import ForkNoteModal from '@/components/notes/ForkNoteModal';
@@ -78,7 +79,7 @@ export default function PublicEditionClient({
       <header className="sticky top-0 z-30 w-full bg-zinc-950/90 border-b border-zinc-800 backdrop-blur-md px-4 sm:px-8 py-3 print:hidden">
         <div className="max-w-4xl mx-auto flex items-center justify-between gap-4">
           <Link
-            href="/"
+            href={currentUser ? "/dashboard" : "/"}
             className="flex items-center gap-2.5 text-zinc-100 font-bold text-base hover:opacity-90 transition-opacity tracking-tight"
           >
             <div className="w-7 h-7 rounded-lg bg-emerald-500/10 border border-emerald-500/20 text-emerald-400 flex items-center justify-center">
@@ -92,6 +93,16 @@ export default function PublicEditionClient({
 
           {/* Quick Action Buttons */}
           <div className="flex items-center gap-2">
+            {currentUser && (
+              <Link
+                href="/dashboard"
+                className="px-2.5 py-1.5 rounded-lg bg-zinc-900 hover:bg-zinc-800 border border-zinc-800 text-zinc-300 hover:text-zinc-100 text-xs font-medium flex items-center gap-1.5 transition-colors"
+                title="Return to Dashboard"
+              >
+                <Home className="w-3.5 h-3.5 text-emerald-400" />
+                <span className="hidden sm:inline">Dashboard</span>
+              </Link>
+            )}
             <button
               onClick={handleCopyLink}
               className="px-2.5 py-1.5 rounded-lg bg-zinc-900 hover:bg-zinc-800 border border-zinc-800 text-zinc-300 hover:text-zinc-100 text-xs font-medium flex items-center gap-1.5 transition-colors cursor-pointer"

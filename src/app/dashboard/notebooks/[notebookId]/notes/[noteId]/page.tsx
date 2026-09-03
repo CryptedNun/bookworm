@@ -19,6 +19,7 @@ import {
   FileText,
   Clock,
   Lock,
+  Home,
 } from 'lucide-react';
 import ForkNoteButton from '@/components/notes/ForkNoteButton';
 import PublishEditionButton from '@/components/notes/PublishEditionButton';
@@ -77,13 +78,22 @@ export default async function NoteDetailPage({ params }: PageProps) {
       {/* Top Navigation */}
       <header className="border-b border-zinc-800/80 bg-zinc-900/60 backdrop-blur-md sticky top-0 z-30 px-6 py-3">
         <div className="max-w-5xl mx-auto flex items-center justify-between gap-4">
-          <div className="flex items-center gap-3 min-w-0">
+          <div className="flex items-center gap-2 min-w-0">
+            <Link
+              href="/dashboard"
+              className="flex items-center gap-1.5 px-2.5 py-1.5 rounded-xl bg-zinc-800/80 hover:bg-zinc-700 text-zinc-300 hover:text-zinc-100 text-xs font-semibold border border-zinc-700/50 transition-all shadow-sm shrink-0"
+              title="Return to Dashboard"
+            >
+              <Home className="w-3.5 h-3.5 text-emerald-400" />
+              <span className="hidden sm:inline">Home</span>
+            </Link>
+
             <Link
               href={`/dashboard/notebooks/${notebookId}/manage`}
               className="p-1.5 rounded-lg hover:bg-zinc-800 text-zinc-400 hover:text-zinc-100 transition-colors"
               title="Back to notebook notes"
             >
-              <ArrowLeft className="w-5 h-5" />
+              <ArrowLeft className="w-4 h-4" />
             </Link>
 
             <div className="flex items-center gap-2 text-sm text-zinc-400 truncate">

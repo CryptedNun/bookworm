@@ -17,6 +17,7 @@ export interface Issue {
   target_block_type?: string;
   target_block_content?: string;
   branch_count?: number;
+  user_branch_id?: string | null;
 }
 
 export interface IssueWithBranches extends Issue {
@@ -221,6 +222,13 @@ export async function createIssue({
       WHERE commit_id = ${latestCommit.commit_id}
     `;
 
+    // Record creator in issue_contributors
+    await sql`
+      INSERT INTO issue_contributors (issue_id, contributor_id, assigned_by)
+      VALUES (${issue.issue_id}, ${user.user_id}, ${user.user_id})
+      ON CONFLICT DO NOTHING
+    `;
+
     // Update issue status to IN_PROGRESS
     await sql`
       UPDATE issues
@@ -296,23 +304,44 @@ export async function getIssues(noteId: string, includeResolved = false) {
         i.created_at,
         u.username as creator_username,
         lbs.block_type as target_block_type,
-        cb.content_text as target_block_content,
+        COALESCE(canonical_content.content_text, fallback_version.content_text) as target_block_content,
         (
           SELECT COUNT(*)
           FROM branches b
           WHERE b.issue_id = i.issue_id
-        ) as branch_count
+        ) as branch_count,
+        (
+          SELECT b.branch_id
+          FROM branches b
+          WHERE b.issue_id = i.issue_id
+            AND b.attempted_by = ${user.user_id}
+            AND b.is_merged = FALSE
+          LIMIT 1
+        ) as user_branch_id
       FROM issues i
       JOIN users u ON u.user_id = i.creator_id
       JOIN logical_block_slots lbs ON lbs.slot_id = i.target_slot_id
       LEFT JOIN LATERAL (
-        SELECT bvc.content_blob_hash
-        FROM block_version_contents bvc
-        WHERE bvc.slot_id = i.target_slot_id
-        ORDER BY bvc.created_at DESC
+        SELECT cb.content_text
+        FROM branches mb
+        JOIN commits mc ON mc.branch_id = mb.branch_id
+        JOIN commit_manifests mcm ON mcm.commit_id = mc.commit_id
+        JOIN block_version_contents mbvc ON mbvc.version_id = mcm.version_id
+        JOIN content_blobs cb ON cb.sha256 = mbvc.content_blob_hash
+        WHERE mb.note_id = i.note_id
+          AND mb.is_main = TRUE
+          AND mcm.slot_id = i.target_slot_id
+        ORDER BY mc.created_at DESC
         LIMIT 1
-      ) latest_version ON TRUE
-      LEFT JOIN content_blobs cb ON cb.sha256 = latest_version.content_blob_hash
+      ) canonical_content ON TRUE
+      LEFT JOIN LATERAL (
+        SELECT cb.content_text
+        FROM block_version_contents bvc
+        JOIN content_blobs cb ON cb.sha256 = bvc.content_blob_hash
+        WHERE bvc.slot_id = i.target_slot_id
+        ORDER BY bvc.created_at ASC
+        LIMIT 1
+      ) fallback_version ON TRUE
       WHERE i.note_id = ${noteId}
       AND ${statusFilter}
       ORDER BY 
@@ -354,18 +383,31 @@ export async function getIssueDetail(issueId: string) {
         i.created_at,
         u.username as creator_username,
         lbs.block_type as target_block_type,
-        cb.content_text as target_block_content
+        COALESCE(canonical_content.content_text, fallback_version.content_text) as target_block_content
       FROM issues i
       JOIN users u ON u.user_id = i.creator_id
       JOIN logical_block_slots lbs ON lbs.slot_id = i.target_slot_id
       LEFT JOIN LATERAL (
-        SELECT bvc.content_blob_hash
-        FROM block_version_contents bvc
-        WHERE bvc.slot_id = i.target_slot_id
-        ORDER BY bvc.created_at DESC
+        SELECT cb.content_text
+        FROM branches mb
+        JOIN commits mc ON mc.branch_id = mb.branch_id
+        JOIN commit_manifests mcm ON mcm.commit_id = mc.commit_id
+        JOIN block_version_contents mbvc ON mbvc.version_id = mcm.version_id
+        JOIN content_blobs cb ON cb.sha256 = mbvc.content_blob_hash
+        WHERE mb.note_id = i.note_id
+          AND mb.is_main = TRUE
+          AND mcm.slot_id = i.target_slot_id
+        ORDER BY mc.created_at DESC
         LIMIT 1
-      ) latest_version ON TRUE
-      LEFT JOIN content_blobs cb ON cb.sha256 = latest_version.content_blob_hash
+      ) canonical_content ON TRUE
+      LEFT JOIN LATERAL (
+        SELECT cb.content_text
+        FROM block_version_contents bvc
+        JOIN content_blobs cb ON cb.sha256 = bvc.content_blob_hash
+        WHERE bvc.slot_id = i.target_slot_id
+        ORDER BY bvc.created_at ASC
+        LIMIT 1
+      ) fallback_version ON TRUE
       WHERE i.issue_id = ${issueId}
     `;
 
@@ -821,8 +863,8 @@ export async function contributeToIssue(issueId: string) {
 
     // 7. Record contributor in issue_contributors
     await sql`
-      INSERT INTO issue_contributors (issue_id, contributor_id)
-      VALUES (${issue.issue_id}, ${user.user_id})
+      INSERT INTO issue_contributors (issue_id, contributor_id, assigned_by)
+      VALUES (${issue.issue_id}, ${user.user_id}, ${user.user_id})
       ON CONFLICT DO NOTHING
     `;
 

@@ -16,6 +16,7 @@ import {
   Calendar,
   Code,
   X,
+  Home,
 } from 'lucide-react';
 import { createIssue, closeIssue, contributeToIssue } from '@/actions/issues';
 import { mergeBranch } from '@/actions/branches';
@@ -59,6 +60,7 @@ export default function IssuesClient({
   const [filter, setFilter] = useState<'all' | 'active' | 'closed'>('all');
 
   const canCreateIssue = ['OWNER', 'MAINTAINER'].includes(note.role_type);
+  const canContribute = ['OWNER', 'MAINTAINER', 'CONTRIBUTOR'].includes(note.role_type);
 
   const openIssues = issues.filter(i => ['OPEN', 'IN_PROGRESS'].includes(i.status));
   const closedIssues = issues.filter(i => ['CLOSED', 'MERGED'].includes(i.status));
@@ -205,12 +207,22 @@ export default function IssuesClient({
       {/* Top Bar */}
       <div className="sticky top-0 z-50 bg-zinc-900/95 backdrop-blur-sm border-b border-zinc-800">
         <div className="max-w-7xl mx-auto px-6 py-4 flex items-center justify-between">
-          <div className="flex items-center gap-4">
+          <div className="flex items-center gap-2">
             <Link
-              href={`/dashboard/notebooks/${notebookId}/notes/${note.note_id}/edit`}
-              className="p-2 rounded-lg hover:bg-zinc-800 transition-colors text-zinc-400 hover:text-zinc-100"
+              href="/dashboard"
+              className="flex items-center gap-1.5 px-2.5 py-1.5 rounded-xl bg-zinc-800/80 hover:bg-zinc-700 text-zinc-300 hover:text-zinc-100 text-xs font-semibold border border-zinc-700/50 transition-all shadow-sm shrink-0"
+              title="Return to Dashboard"
             >
-              <ArrowLeft className="w-5 h-5" />
+              <Home className="w-3.5 h-3.5 text-amber-400" />
+              <span className="hidden sm:inline">Home</span>
+            </Link>
+
+            <Link
+              href={`/dashboard/notebooks/${notebookId}/notes/${note.note_id}`}
+              className="p-1.5 rounded-lg hover:bg-zinc-800 transition-colors text-zinc-400 hover:text-zinc-100"
+              title="Back to Note"
+            >
+              <ArrowLeft className="w-4 h-4" />
             </Link>
 
             <div>
@@ -343,7 +355,7 @@ export default function IssuesClient({
               <IssueCard
                 key={issue.issue_id}
                 issue={issue}
-                canContribute={canCreateIssue}
+                canContribute={canContribute}
                 canClose={issue.creator_id === user.user_id || ['OWNER', 'MAINTAINER'].includes(note.role_type)}
                 isContributing={contributingIssueId === issue.issue_id}
                 currentUserId={user.user_id}
@@ -577,10 +589,16 @@ function IssueCard({
               onClick={onContribute}
               disabled={isContributing}
               className="px-3.5 py-1.5 rounded-lg bg-emerald-600 hover:bg-emerald-500 text-zinc-950 text-xs font-bold transition-all flex items-center gap-1.5 shadow-sm active:scale-95 disabled:opacity-50"
-              title="Work on this issue by creating or opening your attempt branch"
+              title={issue.user_branch_id ? "Resume editing on your attempt branch" : "Work on this issue by creating your isolated attempt branch"}
             >
               <GitBranch className="w-3.5 h-3.5" />
-              <span>{isContributing ? 'Opening Branch...' : 'Contribute / Propose Fix'}</span>
+              <span>
+                {isContributing 
+                  ? 'Opening Branch...' 
+                  : issue.user_branch_id 
+                    ? 'Resume Your Attempt' 
+                    : 'Attempt / Propose Fix'}
+              </span>
             </button>
           )}
 

@@ -20,6 +20,7 @@ import {
   Lock,
   Shield,
   Save,
+  Home,
 } from 'lucide-react';
 import { createNote, updateNoteOrder, deleteNote } from '@/actions/notes';
 import { updateNotebook } from '@/actions/notebooks';
@@ -208,12 +209,14 @@ export default function NotebookManageClient({
       {/* Top Navigation Bar */}
       <div className="sticky top-0 z-50 bg-zinc-900/95 backdrop-blur-sm border-b border-zinc-800">
         <div className="max-w-5xl mx-auto px-6 py-4 flex items-center justify-between">
-          <div className="flex items-center gap-4">
+          <div className="flex items-center gap-3">
             <Link
               href="/dashboard"
-              className="p-2 rounded-lg hover:bg-zinc-800 transition-colors text-zinc-400 hover:text-zinc-100"
+              className="flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-zinc-800/80 hover:bg-zinc-700 text-zinc-300 hover:text-zinc-100 text-xs font-semibold border border-zinc-700/50 transition-all shadow-sm"
+              title="Return to Dashboard"
             >
-              <ArrowLeft className="w-5 h-5" />
+              <Home className="w-3.5 h-3.5 text-purple-400" />
+              <span>Dashboard</span>
             </Link>
             
             <div className="flex items-center gap-3">

@@ -23,6 +23,7 @@ import {
   CircleDot,
   ArrowRight,
   Network,
+  Home,
 } from 'lucide-react';
 import { mergeBranch, deleteBranch, compareBranches } from '@/actions/branches';
 import type { Branch, BranchWithCommits } from '@/actions/branches';
@@ -171,10 +172,20 @@ export default function BranchesClient({ note, branches, notebookId, user }: Bra
       {/* Top Bar */}
       <div className="sticky top-0 z-50 bg-zinc-900/95 backdrop-blur-xl border-b border-white/[0.08]">
         <div className="max-w-7xl mx-auto px-6 py-4 flex items-center justify-between">
-          <div className="flex items-center gap-3 min-w-0">
+          <div className="flex items-center gap-2 min-w-0">
+            <Link
+              href="/dashboard"
+              className="flex items-center gap-1.5 px-2.5 py-1.5 rounded-xl bg-zinc-900/60 hover:bg-zinc-800 border border-white/[0.08] text-zinc-300 hover:text-zinc-100 text-xs font-semibold transition-all shrink-0"
+              title="Return to Dashboard"
+            >
+              <Home className="w-3.5 h-3.5 text-purple-400" />
+              <span className="hidden sm:inline">Home</span>
+            </Link>
+
             <Link
               href={`/dashboard/notebooks/${notebookId}/notes/${note.note_id}`}
-              className="p-2 rounded-xl bg-zinc-900/60 hover:bg-zinc-800 border border-white/[0.08] text-zinc-400 hover:text-zinc-100 transition-all"
+              className="p-2 rounded-xl bg-zinc-900/60 hover:bg-zinc-800 border border-white/[0.08] text-zinc-400 hover:text-zinc-100 transition-all shrink-0"
+              title="Return to note"
             >
               <ArrowLeft className="w-4 h-4" />
             </Link>
@@ -298,7 +309,7 @@ export default function BranchesClient({ note, branches, notebookId, user }: Bra
                 isMain
                 onExpand={() => setExpandedBranch(expandedBranch === mainBranch.branch_id ? null : mainBranch.branch_id)}
                 isExpanded={expandedBranch === mainBranch.branch_id}
-                onEdit={() => router.push(`/dashboard/notebooks/${notebookId}/notes/${note.note_id}/edit`)}
+                onEdit={canMerge ? () => router.push(`/dashboard/notebooks/${notebookId}/notes/${note.note_id}/edit`) : undefined}
               />
             </section>
           )}
@@ -324,7 +335,7 @@ export default function BranchesClient({ note, branches, notebookId, user }: Bra
                     onMerge={canMerge ? () => openReviewModal(branch) : undefined}
                     onDelete={(canMerge || branch.attempted_by === user.user_id) ? () => handleDeleteBranch(branch.branch_id, branch.branch_name) : undefined}
                     onCompare={() => openReviewModal(branch)}
-                    onEdit={() => router.push(`/dashboard/notebooks/${notebookId}/notes/${note.note_id}/edit?branch=${branch.branch_id}`)}
+                    onEdit={branch.attempted_by === user.user_id ? () => router.push(`/dashboard/notebooks/${notebookId}/notes/${note.note_id}/edit?branch=${branch.branch_id}`) : undefined}
                     comparing={isLoadingComparison && reviewBranch?.branch_id === branch.branch_id}
                   />
                 ))}

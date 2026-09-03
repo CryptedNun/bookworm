@@ -26,6 +26,7 @@ import {
   ChevronRight,
   Lock,
   Target,
+  Home,
 } from 'lucide-react';
 import {
   DndContext,
@@ -834,10 +835,19 @@ export default function NoteEditor({ note, notebookId, user, branches = [], curr
       {/* Top Bar */}
       <div className="sticky top-0 z-50 bg-zinc-900/95 backdrop-blur-xl border-b border-white/[0.08]">
         <div className="max-w-5xl mx-auto px-6 py-3.5 flex items-center justify-between gap-4">
-          <div className="flex items-center gap-3 min-w-0">
+          <div className="flex items-center gap-2 min-w-0">
+            <Link
+              href="/dashboard"
+              className="flex items-center gap-1.5 px-2.5 py-1.5 rounded-xl bg-zinc-900/60 hover:bg-zinc-800 border border-white/[0.08] text-zinc-300 hover:text-zinc-100 text-xs font-semibold transition-all shrink-0"
+              title="Return to Dashboard"
+            >
+              <Home className="w-3.5 h-3.5 text-emerald-400" />
+              <span className="hidden sm:inline">Home</span>
+            </Link>
+
             <Link
               href={`/dashboard/notebooks/${notebookId}/notes/${note.note_id}`}
-              className="p-2 rounded-xl bg-zinc-900/60 hover:bg-zinc-800 border border-white/[0.08] text-zinc-400 hover:text-zinc-100 transition-all"
+              className="p-2 rounded-xl bg-zinc-900/60 hover:bg-zinc-800 border border-white/[0.08] text-zinc-400 hover:text-zinc-100 transition-all shrink-0"
               title="Return to note"
             >
               <ArrowLeft className="w-4 h-4" />

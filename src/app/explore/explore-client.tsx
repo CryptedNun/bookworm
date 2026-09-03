@@ -15,6 +15,7 @@ import {
   Sparkles,
   ExternalLink,
   Layers,
+  Home,
 } from 'lucide-react';
 import type { ExploreNotebookItem, ExploreNoteItem, ExploreEditionItem } from '@/actions/explore';
 import ForkNoteModal from '@/components/notes/ForkNoteModal';
@@ -81,7 +82,7 @@ export default function ExploreClient({
       <header className="sticky top-0 z-30 w-full bg-zinc-950/90 border-b border-zinc-800 backdrop-blur-md px-6 py-3">
         <div className="max-w-6xl mx-auto flex items-center justify-between gap-4">
           <Link
-            href="/"
+            href={currentUser ? "/dashboard" : "/"}
             className="flex items-center gap-2.5 text-zinc-100 font-bold text-base hover:opacity-90 transition-opacity tracking-tight"
           >
             <div className="w-8 h-8 rounded-lg bg-emerald-500/10 border border-emerald-500/20 text-emerald-400 flex items-center justify-center">
@@ -97,10 +98,10 @@ export default function ExploreClient({
             {currentUser ? (
               <Link
                 href="/dashboard"
-                className="px-3.5 py-1.5 rounded-lg bg-zinc-800 hover:bg-zinc-700 text-zinc-200 text-xs font-semibold border border-zinc-700/60 transition-colors flex items-center gap-1.5"
+                className="px-3.5 py-1.5 rounded-xl bg-zinc-800 hover:bg-zinc-700 text-zinc-200 text-xs font-semibold border border-zinc-700/60 transition-colors flex items-center gap-1.5 shadow-sm"
               >
+                <Home className="w-3.5 h-3.5 text-emerald-400" />
                 <span>Dashboard</span>
-                <ArrowRight className="w-3.5 h-3.5" />
               </Link>
             ) : (
               <Link

@@ -170,14 +170,14 @@ export async function updateBlock(data: {
         FROM commit_manifests cm
         WHERE cm.commit_id = ${latestCommit.commit_id}
           AND cm.slot_id != ${data.slotId}
-        ON CONFLICT (commit_id, slot_id, version_id) DO NOTHING
+        ON CONFLICT (commit_id, slot_id) DO NOTHING
       `;
     }
 
     await sql`
       INSERT INTO commit_manifests (commit_id, slot_id, version_id)
       VALUES (${newCommit.commit_id}, ${data.slotId}, ${version.version_id})
-      ON CONFLICT (commit_id, slot_id, version_id) DO NOTHING
+      ON CONFLICT (commit_id, slot_id) DO UPDATE SET version_id = EXCLUDED.version_id
     `;
 
     revalidatePath(`/dashboard/notebooks/${data.noteId}`);

@@ -28,6 +28,7 @@ import {
   Info,
   List,
   Network,
+  Home,
 } from 'lucide-react';
 import type { BranchWithCommits } from '@/actions/branches';
 import type { User as AuthUser } from '@/actions/auth';
@@ -299,10 +300,19 @@ export default function TreeClient({ note, branches, notebookId, user }: TreeCli
       {/* 1. Frosted Glass Top Navigation */}
       <header className="sticky top-0 z-40 w-full bg-zinc-950/80 backdrop-blur-2xl border-b border-white/[0.08] px-4 sm:px-8 py-3">
         <div className="max-w-7xl mx-auto flex items-center justify-between gap-4">
-          <div className="flex items-center gap-3 min-w-0">
+          <div className="flex items-center gap-2 min-w-0">
+            <Link
+              href="/dashboard"
+              className="flex items-center gap-1.5 px-2.5 py-1.5 rounded-xl bg-zinc-900/60 hover:bg-zinc-800 border border-white/[0.08] text-zinc-300 hover:text-zinc-100 text-xs font-semibold transition-all shrink-0 cursor-pointer"
+              title="Return to Dashboard"
+            >
+              <Home className="w-3.5 h-3.5 text-emerald-400" />
+              <span className="hidden sm:inline">Home</span>
+            </Link>
+
             <Link
               href={`/dashboard/notebooks/${notebookId}/notes/${note.note_id}`}
-              className="p-2 rounded-xl bg-zinc-900/60 hover:bg-zinc-800 border border-white/[0.08] text-zinc-400 hover:text-zinc-100 transition-all cursor-pointer"
+              className="p-2 rounded-xl bg-zinc-900/60 hover:bg-zinc-800 border border-white/[0.08] text-zinc-400 hover:text-zinc-100 transition-all cursor-pointer shrink-0"
               title="Return to note"
             >
               <ArrowLeft className="w-4 h-4" />

@@ -503,17 +503,25 @@ export async function getNoteWithBlocks(
     let commitId: string | null = null;
     
     if (branchId) {
-      // Get latest commit from specified branch
+      // Get latest commit from specified branch that has manifests
       const [latestCommit] = await sql`
-        SELECT commit_id
-        FROM commits
-        WHERE branch_id = ${branchId}
-        ORDER BY created_at DESC
+        SELECT c.commit_id
+        FROM commits c
+        WHERE c.branch_id = ${branchId}
+          AND EXISTS (SELECT 1 FROM commit_manifests cm WHERE cm.commit_id = c.commit_id)
+        ORDER BY c.created_at DESC
         LIMIT 1
       `;
       commitId = latestCommit?.commit_id;
+
+      if (!commitId) {
+        const [anyCommit] = await sql`
+          SELECT commit_id FROM commits WHERE branch_id = ${branchId} ORDER BY created_at DESC LIMIT 1
+        `;
+        commitId = anyCommit?.commit_id;
+      }
     } else {
-      // Get latest commit from main branch
+      // Get latest commit from main branch that has manifests
       const [mainBranch] = await sql`
         SELECT branch_id
         FROM branches
@@ -522,10 +530,11 @@ export async function getNoteWithBlocks(
       
       if (mainBranch) {
         const [latestCommit] = await sql`
-          SELECT commit_id
-          FROM commits
-          WHERE branch_id = ${mainBranch.branch_id}
-          ORDER BY created_at DESC
+          SELECT c.commit_id
+          FROM commits c
+          WHERE c.branch_id = ${mainBranch.branch_id}
+            AND EXISTS (SELECT 1 FROM commit_manifests cm WHERE cm.commit_id = c.commit_id)
+          ORDER BY c.created_at DESC
           LIMIT 1
         `;
         commitId = latestCommit?.commit_id;
