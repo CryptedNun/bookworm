@@ -75,11 +75,11 @@ export async function createIssue({
     }
 
     const effectiveRole = noteAccess.role_type;
-    // Issue creation requires CONTRIBUTOR, MAINTAINER, or OWNER
-    if (!['OWNER', 'MAINTAINER', 'CONTRIBUTOR'].includes(effectiveRole)) {
+    // Issue creation requires MAINTAINER or OWNER (Contributors attempt on existing issues)
+    if (!['OWNER', 'MAINTAINER'].includes(effectiveRole)) {
       return { 
         success: false, 
-        error: 'Insufficient permissions. You must be a Contributor, Maintainer, or Owner to create an issue on this note.' 
+        error: 'Only Owners and Maintainers can create issues on this note. Contributors can attempt on open issues.' 
       };
     }
 

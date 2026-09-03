@@ -23,6 +23,7 @@ export async function updateBlock(data: {
   slotId: string;
   content: string;
   commitMessage?: string;
+  branchId?: string;
 }): Promise<{ success: boolean; error?: string }> {
   try {
     const user = await getCurrentUser();
@@ -30,16 +31,67 @@ export async function updateBlock(data: {
       return { success: false, error: 'Authentication required' };
     }
 
-    // Check permission (only OWNER/MAINTAINER can edit)
-    const [permission] = await sql`
-      SELECT role_type FROM collaborator_roles
-      WHERE resource_id = ${data.noteId}
-      AND user_id = ${user.user_id}
-      AND role_type IN ('OWNER', 'MAINTAINER')
-    ` as { role_type: string }[];
+    // 1. Resolve target branch and issue scope
+    let branchRecord: {
+      branch_id: string;
+      is_main: boolean;
+      attempted_by: string | null;
+      issue_id: string | null;
+      target_slot_id: string | null;
+    } | undefined;
 
-    if (!permission) {
-      return { success: false, error: 'Insufficient permissions to edit this note' };
+    if (data.branchId) {
+      const [b] = await sql`
+        SELECT b.branch_id, b.is_main, b.attempted_by, b.issue_id, i.target_slot_id
+        FROM branches b
+        LEFT JOIN issues i ON i.issue_id = b.issue_id
+        WHERE b.branch_id = ${data.branchId} AND b.note_id = ${data.noteId}
+        LIMIT 1
+      ` as any[];
+      branchRecord = b;
+    } else {
+      const [b] = await sql`
+        SELECT b.branch_id, b.is_main, b.attempted_by, b.issue_id, NULL as target_slot_id
+        FROM branches b
+        WHERE b.note_id = ${data.noteId} AND b.is_main = TRUE
+        LIMIT 1
+      ` as any[];
+      branchRecord = b;
+    }
+
+    if (!branchRecord) {
+      return { success: false, error: 'Target branch not found' };
+    }
+
+    // 2. Enforce Permissions & Scoping
+    const [role] = await sql`
+      SELECT role_type, capabilities
+      FROM collaborator_roles
+      WHERE resource_id = ${data.noteId} AND user_id = ${user.user_id}
+      LIMIT 1
+    ` as any[];
+
+    if (branchRecord.is_main) {
+      if (!role || !['OWNER', 'MAINTAINER'].includes(role.role_type)) {
+        return { 
+          success: false, 
+          error: 'Only owners and maintainers can edit the main branch directly. Create an issue to propose edits.' 
+        };
+      }
+    } else {
+      const isAttemptAuthor = branchRecord.attempted_by === user.user_id;
+      const isMaintainer = role && ['OWNER', 'MAINTAINER'].includes(role.role_type);
+      if (!isAttemptAuthor && !isMaintainer) {
+        return { success: false, error: 'You are not authorized to edit this branch' };
+      }
+
+      // CRITICAL: Block-level scoping constraint!
+      if (branchRecord.target_slot_id && branchRecord.target_slot_id !== data.slotId) {
+        return {
+          success: false,
+          error: 'This attempt branch is strictly scoped to the targeted block. You cannot edit other blocks on this branch.',
+        };
+      }
     }
 
     // Hash content for deduplication
@@ -60,29 +112,29 @@ export async function updateBlock(data: {
       RETURNING version_id
     ` as { version_id: string }[];
 
-    // Get main branch
-    const [branch] = await sql`
-      SELECT branch_id FROM branches
-      WHERE note_id = ${data.noteId}
-      AND is_main = TRUE
-      LIMIT 1
-    ` as { branch_id: string }[];
-
-    if (!branch) {
-      return { success: false, error: 'Note has no main branch' };
-    }
-
-    // Get latest commit to copy its manifest
-    const [latestCommit] = await sql`
+    // 3. Get latest commit to copy manifest from (from current branch, or fallback to main)
+    let [latestCommit] = await sql`
       SELECT commit_id FROM commits
-      WHERE branch_id = ${branch.branch_id}
+      WHERE branch_id = ${branchRecord.branch_id}
       ORDER BY created_at DESC
       LIMIT 1
     ` as { commit_id: string }[];
 
-    // Create new commit
+    if (!latestCommit) {
+      const [mainCommit] = await sql`
+        SELECT c.commit_id 
+        FROM commits c
+        JOIN branches b ON b.branch_id = c.branch_id
+        WHERE b.note_id = ${data.noteId} AND b.is_main = TRUE
+        ORDER BY c.created_at DESC
+        LIMIT 1
+      ` as { commit_id: string }[];
+      latestCommit = mainCommit;
+    }
+
+    // Create new commit on the target branch
     const commitHash = hashContent(JSON.stringify({
-      branch_id: branch.branch_id,
+      branch_id: branchRecord.branch_id,
       author_id: user.user_id,
       timestamp: Date.now(),
       slot_id: data.slotId,
@@ -98,10 +150,10 @@ export async function updateBlock(data: {
         commit_hash
       )
       VALUES (
-        ${branch.branch_id},
-        ${latestCommit.commit_id},
+        ${branchRecord.branch_id},
+        ${latestCommit ? latestCommit.commit_id : null},
         ${user.user_id},
-        ${data.commitMessage || 'Update block content'},
+        ${data.commitMessage || (branchRecord.is_main ? 'Update block content' : 'Propose block revision')},
         ${commitHash}
       )
       RETURNING commit_id

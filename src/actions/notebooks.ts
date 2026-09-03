@@ -125,6 +125,7 @@ export async function getNotebooks(userId: string): Promise<Notebook[]> {
         nb.visibility,
         COALESCE(
           (SELECT cr.role_type FROM collaborator_roles cr WHERE cr.resource_id = nb.notebook_id AND cr.user_id = ${userId} LIMIT 1),
+          (SELECT cr_note.role_type FROM notes n JOIN collaborator_roles cr_note ON cr_note.resource_id = n.note_id WHERE n.notebook_id = nb.notebook_id AND cr_note.user_id = ${userId} AND n.deleted_at IS NULL LIMIT 1),
           CASE WHEN nb.owner_id = ${userId} THEN 'OWNER' ELSE 'VIEWER' END
         ) as role_type,
         r.created_at,
@@ -138,6 +139,13 @@ export async function getNotebooks(userId: string): Promise<Notebook[]> {
           OR EXISTS (
             SELECT 1 FROM collaborator_roles cr 
             WHERE cr.resource_id = nb.notebook_id AND cr.user_id = ${userId}
+          )
+          OR EXISTS (
+            SELECT 1 FROM notes n
+            JOIN collaborator_roles cr ON cr.resource_id = n.note_id
+            WHERE n.notebook_id = nb.notebook_id 
+              AND cr.user_id = ${userId}
+              AND n.deleted_at IS NULL
           )
         )
       ORDER BY r.created_at DESC
@@ -197,6 +205,7 @@ export async function getNotebook(notebookId: string, userId?: string) {
         r.created_at,
         COALESCE(
           (SELECT cr.role_type FROM collaborator_roles cr WHERE cr.resource_id = nb.notebook_id AND cr.user_id = ${userId} LIMIT 1),
+          (SELECT cr_note.role_type FROM notes n JOIN collaborator_roles cr_note ON cr_note.resource_id = n.note_id WHERE n.notebook_id = nb.notebook_id AND cr_note.user_id = ${userId} AND n.deleted_at IS NULL LIMIT 1),
           CASE WHEN nb.owner_id = ${userId} THEN 'OWNER' ELSE 'VIEWER' END
         ) as role_type,
         u.username as owner_username,
@@ -212,6 +221,19 @@ export async function getNotebook(notebookId: string, userId?: string) {
           OR EXISTS (
             SELECT 1 FROM collaborator_roles cr 
             WHERE cr.resource_id = nb.notebook_id AND cr.user_id = ${userId}
+          )
+          OR EXISTS (
+            SELECT 1 FROM notes n
+            JOIN collaborator_roles cr ON cr.resource_id = n.note_id
+            WHERE n.notebook_id = nb.notebook_id 
+              AND cr.user_id = ${userId}
+              AND n.deleted_at IS NULL
+          )
+          OR EXISTS (
+            SELECT 1 FROM notes n
+            WHERE n.notebook_id = nb.notebook_id 
+              AND n.visibility = 'PUBLIC'
+              AND n.deleted_at IS NULL
           )
         )
     `;

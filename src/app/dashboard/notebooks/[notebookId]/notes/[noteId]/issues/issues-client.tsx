@@ -58,7 +58,7 @@ export default function IssuesClient({
   const [success, setSuccess] = useState<string | null>(null);
   const [filter, setFilter] = useState<'all' | 'active' | 'closed'>('all');
 
-  const canCreateIssue = ['OWNER', 'MAINTAINER', 'CONTRIBUTOR'].includes(note.role_type);
+  const canCreateIssue = ['OWNER', 'MAINTAINER'].includes(note.role_type);
 
   const openIssues = issues.filter(i => ['OPEN', 'IN_PROGRESS'].includes(i.status));
   const closedIssues = issues.filter(i => ['CLOSED', 'MERGED'].includes(i.status));

@@ -24,6 +24,8 @@ import {
   ChevronDown,
   ArrowRight,
   ChevronRight,
+  Lock,
+  Target,
 } from 'lucide-react';
 import {
   DndContext,
@@ -76,11 +78,15 @@ interface NoteEditorProps {
     branch_name: string;
     is_main: boolean;
     is_merged: boolean;
+    target_slot_id?: string | null;
+    issue_title?: string | null;
   }>;
   currentBranch?: {
     branch_id: string;
     branch_name: string;
     is_main: boolean;
+    target_slot_id?: string | null;
+    issue_title?: string | null;
   };
   userRole?: string;
 }
@@ -181,6 +187,9 @@ function SortableBlock({
   showSuccess,
   onTextSelect,
   textareaRef,
+  isLocked = false,
+  isTarget = false,
+  targetReason,
 }: {
   block: Block;
   isEditing: boolean;
@@ -194,6 +203,9 @@ function SortableBlock({
   showSuccess: boolean;
   onTextSelect: (slotId: string, selection: { start: number; end: number; text: string }) => void;
   textareaRef: React.RefObject<HTMLTextAreaElement | null>;
+  isLocked?: boolean;
+  isTarget?: boolean;
+  targetReason?: string;
 }) {
   const {
     attributes,
@@ -202,7 +214,7 @@ function SortableBlock({
     transform,
     transition,
     isDragging,
-  } = useSortable({ id: block.slot_id });
+  } = useSortable({ id: block.slot_id, disabled: isLocked });
 
   const style = {
     transform: CSS.Transform.toString(transform),
@@ -211,7 +223,7 @@ function SortableBlock({
   };
 
   const handleSelect = () => {
-    if (!textareaRef.current) return;
+    if (isLocked || !textareaRef.current) return;
     
     const start = textareaRef.current.selectionStart;
     const end = textareaRef.current.selectionEnd;
@@ -224,33 +236,43 @@ function SortableBlock({
 
   return (
     <div ref={setNodeRef} style={style}>
-      <div className={`group relative bg-zinc-900 rounded-lg border transition-all ${
+      <div className={`group relative rounded-lg border transition-all ${
         isDragging 
           ? 'border-emerald-500 shadow-lg shadow-emerald-500/20' 
+          : isTarget
+          ? 'border-amber-500/80 bg-amber-950/20 shadow-lg shadow-amber-500/10'
+          : isLocked
+          ? 'border-zinc-800/40 bg-zinc-950/40 opacity-70'
           : showSuccess
-          ? 'border-emerald-500/50'
-          : 'border-zinc-800 hover:border-zinc-700'
+          ? 'border-emerald-500/50 bg-zinc-900'
+          : 'border-zinc-800 hover:border-zinc-700 bg-zinc-900'
       }`}>
         <div className="flex items-start gap-3 p-4">
-          {/* Drag Handle */}
-          <button
-            {...attributes}
-            {...listeners}
-            className="opacity-0 group-hover:opacity-100 p-2 rounded hover:bg-zinc-800 text-zinc-500 hover:text-zinc-300 transition-all cursor-grab active:cursor-grabbing touch-none"
-            aria-label="Drag to reorder"
-            title="Drag to reorder"
-          >
-            <GripVertical className="w-4 h-4" />
-          </button>
+          {/* Drag Handle (Hidden if locked) */}
+          {!isLocked ? (
+            <button
+              {...attributes}
+              {...listeners}
+              className="opacity-0 group-hover:opacity-100 p-2 rounded hover:bg-zinc-800 text-zinc-500 hover:text-zinc-300 transition-all cursor-grab active:cursor-grabbing touch-none"
+              aria-label="Drag to reorder"
+              title="Drag to reorder"
+            >
+              <GripVertical className="w-4 h-4" />
+            </button>
+          ) : (
+            <div className="p-2 text-zinc-600 shrink-0" title="Reordering locked on this branch">
+              <Lock className="w-4 h-4 text-zinc-600" />
+            </div>
+          )}
 
           {/* Block Type Icon */}
-          <div className="p-2 rounded bg-zinc-800 text-zinc-400 flex-shrink-0">
+          <div className={`p-2 rounded flex-shrink-0 ${isTarget ? 'bg-amber-500/20 text-amber-400' : 'bg-zinc-800 text-zinc-400'}`}>
             {getBlockIcon(block.block_type)}
           </div>
 
           {/* Content */}
           <div className="flex-1 min-w-0">
-            <div className="flex items-center gap-2 mb-2">
+            <div className="flex items-center gap-2 mb-2 flex-wrap">
               <span className="text-xs font-mono text-zinc-500">
                 {block.block_type}
               </span>
@@ -258,6 +280,27 @@ function SortableBlock({
               <span className="text-xs text-zinc-600">
                 {block.author_username}
               </span>
+
+              {isTarget && (
+                <>
+                  <span className="text-xs text-zinc-600">•</span>
+                  <span className="text-[11px] px-2 py-0.5 rounded-full bg-amber-500/20 text-amber-300 font-semibold flex items-center gap-1 border border-amber-500/30">
+                    <Target className="w-3 h-3 text-amber-400" />
+                    Target Block for Issue Revision
+                  </span>
+                </>
+              )}
+
+              {isLocked && (
+                <>
+                  <span className="text-xs text-zinc-600">•</span>
+                  <span className="text-[11px] px-2 py-0.5 rounded-full bg-zinc-800 text-zinc-500 flex items-center gap-1">
+                    <Lock className="w-3 h-3 text-zinc-500" />
+                    Read-Only (Scoped to targeted block)
+                  </span>
+                </>
+              )}
+
               {showSuccess && (
                 <>
                   <span className="text-xs text-zinc-600">•</span>
@@ -274,8 +317,9 @@ function SortableBlock({
               value={editContent}
               onChange={(e) => onContentChange(e.target.value)}
               onSelect={handleSelect}
-              onBlur={() => isEditing && onSave()}
+              onBlur={() => !isLocked && isEditing && onSave()}
               onKeyDown={(e) => {
+                if (isLocked) return;
                 // Ctrl/Cmd + S to save
                 if ((e.ctrlKey || e.metaKey) && e.key === 's') {
                   e.preventDefault();
@@ -287,13 +331,16 @@ function SortableBlock({
                   onCancel();
                 }
               }}
-              disabled={saving}
-              placeholder="Start typing... (Select text and press Ctrl+/ to split)"
-              className="w-full bg-transparent text-zinc-100 border-none outline-none resize-none font-mono text-sm leading-relaxed disabled:opacity-50 placeholder:text-zinc-600"
+              disabled={saving || isLocked}
+              readOnly={isLocked}
+              placeholder={isLocked ? "This block is read-only on this branch" : "Start typing... (Select text and press Ctrl+/ to split)"}
+              className={`w-full bg-transparent border-none outline-none resize-none font-mono text-sm leading-relaxed ${
+                isLocked ? 'text-zinc-400 cursor-default' : 'text-zinc-100 placeholder:text-zinc-600'
+              } disabled:opacity-75`}
               rows={Math.max(3, editContent.split('\n').length)}
             />
 
-            {isEditing && (
+            {!isLocked && isEditing && (
               <div className="mt-2 flex items-center gap-2">
                 <button
                   onClick={onSave}
@@ -305,7 +352,7 @@ function SortableBlock({
                   ) : (
                     <Save className="w-3 h-3" />
                   )}
-                  Save
+                  {isTarget ? 'Save Revision' : 'Save'}
                 </button>
                 <button
                   onClick={onCancel}
@@ -321,16 +368,18 @@ function SortableBlock({
             )}
           </div>
 
-          {/* Delete Button */}
-          <button
-            onClick={onDelete}
-            disabled={saving}
-            className="opacity-0 group-hover:opacity-100 p-2 rounded hover:bg-zinc-800 text-zinc-500 hover:text-red-400 transition-all disabled:opacity-50"
-            aria-label="Delete block"
-            title="Delete block"
-          >
-            <Trash2 className="w-4 h-4" />
-          </button>
+          {/* Delete Button (hidden if locked) */}
+          {!isLocked && (
+            <button
+              onClick={onDelete}
+              disabled={saving}
+              className="opacity-0 group-hover:opacity-100 p-2 rounded hover:bg-zinc-800 text-zinc-500 hover:text-red-400 transition-all disabled:opacity-50"
+              aria-label="Delete block"
+              title="Delete block"
+            >
+              <Trash2 className="w-4 h-4" />
+            </button>
+          )}
         </div>
       </div>
     </div>
@@ -340,6 +389,8 @@ function SortableBlock({
 export default function NoteEditor({ note, notebookId, user, branches = [], currentBranch, userRole = 'CONTRIBUTOR' }: NoteEditorProps) {
   const router = useRouter();
   const [blocks, setBlocks] = useState(note.blocks);
+  const isAttemptBranch = !!(currentBranch && !currentBranch.is_main);
+  const targetSlotId = currentBranch?.target_slot_id;
   const [showBranchMenu, setShowBranchMenu] = useState(false);
   const [editingBlocks, setEditingBlocks] = useState<Record<string, string>>({});
   const [saving, setSaving] = useState(false);
@@ -497,7 +548,7 @@ export default function NoteEditor({ note, notebookId, user, branches = [], curr
   }, []);
 
   const handleSplitBlock = useCallback(async (blockType: 'PARAGRAPH' | 'HEADING' | 'CODE' | 'QUOTE') => {
-    if (!selectionMenu) return;
+    if (isAttemptBranch || !selectionMenu) return;
 
     const { slotId, selection } = selectionMenu;
     const block = blocks.find(b => b.slot_id === slotId);
@@ -565,7 +616,10 @@ export default function NoteEditor({ note, notebookId, user, branches = [], curr
         noteId: note.note_id,
         slotId,
         content,
-        commitMessage: 'Update block content',
+        commitMessage: currentBranch?.is_main
+          ? 'Update block content'
+          : `Revise target block on ${currentBranch?.branch_name || 'branch'}`,
+        branchId: currentBranch?.branch_id,
       });
 
       if (result.success) {
@@ -612,6 +666,8 @@ export default function NoteEditor({ note, notebookId, user, branches = [], curr
     prevSlotId: string | null,
     blockType: 'PARAGRAPH' | 'HEADING' | 'CODE' | 'QUOTE'
   ) => {
+    if (isAttemptBranch) return;
+
     setSaving(true);
     setError(null);
     
@@ -640,9 +696,10 @@ export default function NoteEditor({ note, notebookId, user, branches = [], curr
     } finally {
       setSaving(false);
     }
-  }, [blocks, note.note_id, router]);
+  }, [blocks, isAttemptBranch, note.note_id, router]);
 
   const handleDeleteBlock = useCallback(async (slotId: string) => {
+    if (isAttemptBranch) return;
     if (!confirm('Delete this block? This action cannot be undone.')) return;
 
     setSaving(true);
@@ -675,7 +732,7 @@ export default function NoteEditor({ note, notebookId, user, branches = [], curr
     const { active, over } = event;
     setActiveId(null);
 
-    if (!over || active.id === over.id) return;
+    if (isAttemptBranch || !over || active.id === over.id) return;
 
     const oldIndex = blocks.findIndex((b) => b.slot_id === active.id);
     const newIndex = blocks.findIndex((b) => b.slot_id === over.id);
@@ -910,46 +967,68 @@ export default function NoteEditor({ note, notebookId, user, branches = [], curr
       {/* Editor */}
       <div className="max-w-4xl mx-auto px-6 py-12 animate-page-in">
         <div className="space-y-4">
-          {/* Insert at start */}
-          <div className="relative">
-            <button
-              onClick={() => setShowInsertMenu(showInsertMenu === 'start' ? null : 'start')}
-              disabled={saving}
-              className="w-full py-2 border-2 border-dashed border-zinc-800 hover:border-emerald-500 rounded-lg text-zinc-600 hover:text-emerald-400 transition-colors disabled:opacity-50 flex items-center justify-center gap-2"
-            >
-              <Plus className="w-4 h-4" />
-              <span className="text-sm">Insert block (Ctrl+Enter)</span>
-            </button>
-
-            {showInsertMenu === 'start' && (
-              <div className="absolute top-full left-0 mt-2 bg-zinc-800 rounded-lg shadow-lg border border-zinc-700 p-2 z-10 min-w-[200px]">
-                <button
-                  onClick={() => handleInsertBlock(null, 'PARAGRAPH')}
-                  className="w-full px-4 py-2 text-left hover:bg-zinc-700 rounded flex items-center gap-2 text-zinc-200"
-                >
-                  <AlignLeft className="w-4 h-4" /> Paragraph
-                </button>
-                <button
-                  onClick={() => handleInsertBlock(null, 'HEADING')}
-                  className="w-full px-4 py-2 text-left hover:bg-zinc-700 rounded flex items-center gap-2 text-zinc-200"
-                >
-                  <Type className="w-4 h-4" /> Heading
-                </button>
-                <button
-                  onClick={() => handleInsertBlock(null, 'CODE')}
-                  className="w-full px-4 py-2 text-left hover:bg-zinc-700 rounded flex items-center gap-2 text-zinc-200"
-                >
-                  <Code className="w-4 h-4" /> Code
-                </button>
-                <button
-                  onClick={() => handleInsertBlock(null, 'QUOTE')}
-                  className="w-full px-4 py-2 text-left hover:bg-zinc-700 rounded flex items-center gap-2 text-zinc-200"
-                >
-                  <Quote className="w-4 h-4" /> Quote
-                </button>
+          {/* Scoped Revision Mode Banner */}
+          {isAttemptBranch && (
+            <div className="p-4 rounded-xl bg-amber-500/10 border border-amber-500/30 flex items-start gap-3 shadow-lg shadow-amber-500/5">
+              <div className="p-2 rounded-lg bg-amber-500/20 text-amber-400 shrink-0 mt-0.5">
+                <Target className="w-5 h-5" />
               </div>
-            )}
-          </div>
+              <div>
+                <h4 className="text-sm font-semibold text-amber-300 flex items-center gap-2">
+                  Scoped Revision Mode
+                  <span className="text-xs px-2 py-0.5 rounded bg-amber-500/20 text-amber-300 font-mono font-normal border border-amber-500/40">
+                    {currentBranch?.branch_name}
+                  </span>
+                </h4>
+                <p className="text-xs text-amber-200/80 mt-1 leading-relaxed">
+                  You are editing on an issue attempt branch. Per BookWorm&apos;s zero-conflict isolation model, only the targeted block is editable on this branch. All other blocks are locked as read-only to guarantee collision-free merges.
+                </p>
+              </div>
+            </div>
+          )}
+
+          {/* Insert at start (only on main branch) */}
+          {!isAttemptBranch && (
+            <div className="relative">
+              <button
+                onClick={() => setShowInsertMenu(showInsertMenu === 'start' ? null : 'start')}
+                disabled={saving}
+                className="w-full py-2 border-2 border-dashed border-zinc-800 hover:border-emerald-500 rounded-lg text-zinc-600 hover:text-emerald-400 transition-colors disabled:opacity-50 flex items-center justify-center gap-2"
+              >
+                <Plus className="w-4 h-4" />
+                <span className="text-sm">Insert block (Ctrl+Enter)</span>
+              </button>
+
+              {showInsertMenu === 'start' && (
+                <div className="absolute top-full left-0 mt-2 bg-zinc-800 rounded-lg shadow-lg border border-zinc-700 p-2 z-10 min-w-[200px]">
+                  <button
+                    onClick={() => handleInsertBlock(null, 'PARAGRAPH')}
+                    className="w-full px-4 py-2 text-left hover:bg-zinc-700 rounded flex items-center gap-2 text-zinc-200"
+                  >
+                    <AlignLeft className="w-4 h-4" /> Paragraph
+                  </button>
+                  <button
+                    onClick={() => handleInsertBlock(null, 'HEADING')}
+                    className="w-full px-4 py-2 text-left hover:bg-zinc-700 rounded flex items-center gap-2 text-zinc-200"
+                  >
+                    <Type className="w-4 h-4" /> Heading
+                  </button>
+                  <button
+                    onClick={() => handleInsertBlock(null, 'CODE')}
+                    className="w-full px-4 py-2 text-left hover:bg-zinc-700 rounded flex items-center gap-2 text-zinc-200"
+                  >
+                    <Code className="w-4 h-4" /> Code
+                  </button>
+                  <button
+                    onClick={() => handleInsertBlock(null, 'QUOTE')}
+                    className="w-full px-4 py-2 text-left hover:bg-zinc-700 rounded flex items-center gap-2 text-zinc-200"
+                  >
+                    <Quote className="w-4 h-4" /> Quote
+                  </button>
+                </div>
+              )}
+            </div>
+          )}
 
           {/* Blocks with Drag and Drop */}
           <DndContext
@@ -968,6 +1047,9 @@ export default function NoteEditor({ note, notebookId, user, branches = [], curr
                   const displayContent = isEditing
                     ? editingBlocks[block.slot_id]
                     : block.content_text;
+
+                  const isLocked = isAttemptBranch && targetSlotId ? block.slot_id !== targetSlotId : false;
+                  const isTarget = isAttemptBranch && targetSlotId ? block.slot_id === targetSlotId : false;
 
                   // Get or create ref for this block
                   if (!textareaRefs.current[block.slot_id]) {
@@ -989,52 +1071,57 @@ export default function NoteEditor({ note, notebookId, user, branches = [], curr
                         showSuccess={successBlocks.has(block.slot_id)}
                         onTextSelect={handleTextSelect}
                         textareaRef={textareaRefs.current[block.slot_id]}
+                        isLocked={isLocked}
+                        isTarget={isTarget}
+                        targetReason={currentBranch?.issue_title || undefined}
                       />
 
-                      {/* Insert after this block */}
-                      <div className="relative">
-                        <button
-                          onClick={() =>
-                            setShowInsertMenu(
-                              showInsertMenu === block.slot_id ? null : block.slot_id
-                            )
-                          }
-                          disabled={saving}
-                          className="w-full py-2 border-2 border-dashed border-zinc-800 hover:border-emerald-500 rounded-lg text-zinc-600 hover:text-emerald-400 transition-colors disabled:opacity-50 flex items-center justify-center gap-2"
-                        >
-                          <Plus className="w-4 h-4" />
-                          <span className="text-sm">Insert block</span>
-                        </button>
+                      {/* Insert after this block (only on main branch) */}
+                      {!isAttemptBranch && (
+                        <div className="relative">
+                          <button
+                            onClick={() =>
+                              setShowInsertMenu(
+                                showInsertMenu === block.slot_id ? null : block.slot_id
+                              )
+                            }
+                            disabled={saving}
+                            className="w-full py-2 border-2 border-dashed border-zinc-800 hover:border-emerald-500 rounded-lg text-zinc-600 hover:text-emerald-400 transition-colors disabled:opacity-50 flex items-center justify-center gap-2"
+                          >
+                            <Plus className="w-4 h-4" />
+                            <span className="text-sm">Insert block</span>
+                          </button>
 
-                        {showInsertMenu === block.slot_id && (
-                          <div className="absolute top-full left-0 mt-2 bg-zinc-800 rounded-lg shadow-lg border border-zinc-700 p-2 z-10 min-w-[200px]">
-                            <button
-                              onClick={() => handleInsertBlock(block.slot_id, 'PARAGRAPH')}
-                              className="w-full px-4 py-2 text-left hover:bg-zinc-700 rounded flex items-center gap-2 text-zinc-200"
-                            >
-                              <AlignLeft className="w-4 h-4" /> Paragraph
-                            </button>
-                            <button
-                              onClick={() => handleInsertBlock(block.slot_id, 'HEADING')}
-                              className="w-full px-4 py-2 text-left hover:bg-zinc-700 rounded flex items-center gap-2 text-zinc-200"
-                            >
-                              <Type className="w-4 h-4" /> Heading
-                            </button>
-                            <button
-                              onClick={() => handleInsertBlock(block.slot_id, 'CODE')}
-                              className="w-full px-4 py-2 text-left hover:bg-zinc-700 rounded flex items-center gap-2 text-zinc-200"
-                            >
-                              <Code className="w-4 h-4" /> Code
-                            </button>
-                            <button
-                              onClick={() => handleInsertBlock(block.slot_id, 'QUOTE')}
-                              className="w-full px-4 py-2 text-left hover:bg-zinc-700 rounded flex items-center gap-2 text-zinc-200"
-                            >
-                              <Quote className="w-4 h-4" /> Quote
-                            </button>
-                          </div>
-                        )}
-                      </div>
+                          {showInsertMenu === block.slot_id && (
+                            <div className="absolute top-full left-0 mt-2 bg-zinc-800 rounded-lg shadow-lg border border-zinc-700 p-2 z-10 min-w-[200px]">
+                              <button
+                                onClick={() => handleInsertBlock(block.slot_id, 'PARAGRAPH')}
+                                className="w-full px-4 py-2 text-left hover:bg-zinc-700 rounded flex items-center gap-2 text-zinc-200"
+                              >
+                                <AlignLeft className="w-4 h-4" /> Paragraph
+                              </button>
+                              <button
+                                onClick={() => handleInsertBlock(block.slot_id, 'HEADING')}
+                                className="w-full px-4 py-2 text-left hover:bg-zinc-700 rounded flex items-center gap-2 text-zinc-200"
+                              >
+                                <Type className="w-4 h-4" /> Heading
+                              </button>
+                              <button
+                                onClick={() => handleInsertBlock(block.slot_id, 'CODE')}
+                                className="w-full px-4 py-2 text-left hover:bg-zinc-700 rounded flex items-center gap-2 text-zinc-200"
+                              >
+                                <Code className="w-4 h-4" /> Code
+                              </button>
+                              <button
+                                onClick={() => handleInsertBlock(block.slot_id, 'QUOTE')}
+                                className="w-full px-4 py-2 text-left hover:bg-zinc-700 rounded flex items-center gap-2 text-zinc-200"
+                              >
+                                <Quote className="w-4 h-4" /> Quote
+                              </button>
+                            </div>
+                          )}
+                        </div>
+                      )}
                     </div>
                   );
                 })}

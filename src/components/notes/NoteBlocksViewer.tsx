@@ -161,15 +161,17 @@ export default function NoteBlocksViewer({
                   <span>History</span>
                 </button>
 
-                {/* 3. Propose Edit / Lock Block */}
-                <Link
-                  href={`/dashboard/notebooks/${notebookId}/notes/${noteId}/issues?slotId=${block.slot_id}&action=new`}
-                  className="flex items-center gap-1 px-2.5 py-1 rounded-lg bg-zinc-800/90 hover:bg-zinc-700 text-amber-300 text-[11px] font-medium border border-amber-500/30 shadow-md transition-all backdrop-blur-sm"
-                  title="Lock this block and propose an edit via an issue"
-                >
-                  <Lock className="w-3 h-3 text-amber-400" />
-                  <span>Propose Edit</span>
-                </Link>
+                {/* 3. Create Issue / Lock Block (Owners and Maintainers only) */}
+                {canEdit && (
+                  <Link
+                    href={`/dashboard/notebooks/${notebookId}/notes/${noteId}/issues?slotId=${block.slot_id}&action=new`}
+                    className="flex items-center gap-1 px-2.5 py-1 rounded-lg bg-zinc-800/90 hover:bg-zinc-700 text-amber-300 text-[11px] font-medium border border-amber-500/30 shadow-md transition-all backdrop-blur-sm"
+                    title="Lock this block and create an issue task"
+                  >
+                    <Lock className="w-3 h-3 text-amber-400" />
+                    <span>Create Issue</span>
+                  </Link>
+                )}
               </div>
 
               {/* Markdown Content */}

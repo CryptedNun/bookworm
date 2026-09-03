@@ -217,7 +217,7 @@ export async function reviewAccessRequest(input: {
           ${reviewerId},
           ${request.requested_role === 'MAINTAINER' 
             ? '{"can_create_issue": true, "can_delete_branch": true, "can_merge_branch": true, "can_add_contributor": false}'
-            : '{"can_create_issue": true, "can_delete_branch": false, "can_merge_branch": false, "can_add_contributor": false}'
+            : '{"can_create_issue": false, "can_delete_branch": false, "can_merge_branch": false, "can_add_contributor": false}'
           }::jsonb
         )
       `;
@@ -477,7 +477,7 @@ export async function addCollaborator(input: {
         ${grantedBy},
         ${role === 'MAINTAINER' 
           ? '{"can_create_issue": true, "can_delete_branch": true, "can_merge_branch": true, "can_add_contributor": false}'
-          : '{"can_create_issue": true, "can_delete_branch": false, "can_merge_branch": false, "can_add_contributor": false}'
+          : '{"can_create_issue": false, "can_delete_branch": false, "can_merge_branch": false, "can_add_contributor": false}'
         }::jsonb
       )
     `;
@@ -644,7 +644,7 @@ export async function updateCollaboratorRole(input: {
         role_type = ${newRole},
         capabilities = ${newRole === 'MAINTAINER' 
           ? '{"can_create_issue": true, "can_delete_branch": true, "can_merge_branch": true, "can_add_contributor": false}'
-          : '{"can_create_issue": true, "can_delete_branch": false, "can_merge_branch": false, "can_add_contributor": false}'
+          : '{"can_create_issue": false, "can_delete_branch": false, "can_merge_branch": false, "can_add_contributor": false}'
         }::jsonb
       WHERE resource_id = ${resourceId}
         AND user_id = ${targetUserId}

@@ -46,17 +46,17 @@ export default async function NoteDetailPage({ params }: PageProps) {
 
   const { notebookId, noteId } = await params;
 
-  // Fetch notebook metadata
-  const notebookResult = await getNotebook(notebookId);
-  if (!notebookResult.success || !notebookResult.notebook) {
-    redirect('/dashboard');
-  }
-
   // Fetch note with all its block versions
   const noteResult = await getNoteWithBlocks(noteId);
   if (!noteResult.success || !noteResult.note) {
-    redirect(`/dashboard/notebooks/${notebookId}`);
+    redirect('/dashboard');
   }
+
+  // Fetch notebook metadata (or use note's joined notebook_title)
+  const notebookResult = await getNotebook(notebookId);
+  const notebookTitle = notebookResult.success && notebookResult.notebook?.title 
+    ? notebookResult.notebook.title 
+    : (noteResult.note.notebook_title || 'Notebook');
 
   // Fetch user notebooks for forking
   const userNotebooksResult = await getUserNotebooks();
@@ -92,7 +92,7 @@ export default async function NoteDetailPage({ params }: PageProps) {
                 href={`/dashboard/notebooks/${notebookId}`}
                 className="hover:text-zinc-200 transition-colors truncate"
               >
-                {notebookResult.notebook.title}
+                {notebookTitle}
               </Link>
               <span>/</span>
               <span className="text-zinc-100 font-semibold truncate">{note.title}</span>

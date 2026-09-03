@@ -12,6 +12,8 @@ export interface Branch {
   attempted_by: string | null;
   branch_name: string;
   is_main: boolean;
+  target_slot_id?: string | null;
+  issue_title?: string | null;
   is_merged: boolean;
   selected_by: string | null;
   selected_at: string | null;
@@ -73,6 +75,8 @@ export async function getBranches(noteId: string, includeCommits = false) {
         b.branch_id,
         b.note_id,
         b.issue_id,
+        i.target_slot_id,
+        i.title as issue_title,
         b.attempted_by,
         b.branch_name,
         b.is_main,
@@ -90,6 +94,7 @@ export async function getBranches(noteId: string, includeCommits = false) {
           WHERE c2.branch_id = b.branch_id
         ) as commit_count
       FROM branches b
+      LEFT JOIN issues i ON i.issue_id = b.issue_id
       LEFT JOIN LATERAL (
         SELECT commit_id, commit_message, author_id, created_at
         FROM commits

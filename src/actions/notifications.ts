@@ -140,14 +140,20 @@ export async function notifyAccessGranted(input: {
       SELECT username FROM users WHERE user_id = ${grantedBy}
     `;
 
+    let targetLink = `/dashboard/notebooks/${resourceId}`;
+    if (resourceType === 'NOTE') {
+      const [n] = await sql`SELECT notebook_id FROM notes WHERE note_id = ${resourceId}`;
+      targetLink = n?.notebook_id 
+        ? `/dashboard/notebooks/${n.notebook_id}/notes/${resourceId}`
+        : `/dashboard/notes/${resourceId}`;
+    }
+
     await createNotification({
       userId,
       type: 'ACCESS_GRANTED',
       title: 'Access Granted',
       message: `Your request for ${grantedRole} access to ${resourceType.toLowerCase()} "${resourceTitle}" was approved${grantor ? ` by ${grantor.username}` : ''}`,
-      link: resourceType === 'NOTEBOOK' 
-        ? `/dashboard/notebooks/${resourceId}`
-        : `/dashboard/notebooks/${resourceId}/notes`,
+      link: targetLink,
       relatedResourceId: resourceId,
       relatedUserId: grantedBy,
     });
@@ -210,14 +216,20 @@ export async function notifyCollaboratorAdded(input: {
       SELECT username FROM users WHERE user_id = ${addedBy}
     `;
 
+    let targetLink = `/dashboard/notebooks/${resourceId}`;
+    if (resourceType === 'NOTE') {
+      const [n] = await sql`SELECT notebook_id FROM notes WHERE note_id = ${resourceId}`;
+      targetLink = n?.notebook_id 
+        ? `/dashboard/notebooks/${n.notebook_id}/notes/${resourceId}`
+        : `/dashboard/notes/${resourceId}`;
+    }
+
     await createNotification({
       userId,
       type: 'COLLABORATOR_ADDED',
       title: 'Added as Collaborator',
       message: `${adder?.username || 'Someone'} added you as ${role} to ${resourceType.toLowerCase()} "${resourceTitle}"`,
-      link: resourceType === 'NOTEBOOK' 
-        ? `/dashboard/notebooks/${resourceId}`
-        : `/dashboard/notebooks/${resourceId}/notes`,
+      link: targetLink,
       relatedResourceId: resourceId,
       relatedUserId: addedBy,
     });
