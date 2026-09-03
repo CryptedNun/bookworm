@@ -28,7 +28,7 @@ interface CreateNoteInput {
   title: string;
   notebookId: string;
   description?: string;
-  visibility?: 'PUBLIC' | 'PRIVATE' | 'UNLISTED';
+  visibility?: 'PUBLIC' | 'PRIVATE' | 'UNLISTED' | 'SHARED';
   userId: string; // From auth
 }
 
@@ -307,17 +307,30 @@ export async function getNotesForNotebook(notebookId: string, userId: string) {
         n.display_order,
         r.created_at,
         e.edition_name as default_edition,
-        cr.role_type,
+        COALESCE(
+          (SELECT cr_note.role_type FROM collaborator_roles cr_note WHERE cr_note.resource_id = n.note_id AND cr_note.user_id = ${userId} LIMIT 1),
+          (SELECT cr_nb.role_type FROM collaborator_roles cr_nb WHERE cr_nb.resource_id = n.notebook_id AND cr_nb.user_id = ${userId} LIMIT 1),
+          CASE WHEN nb.owner_id = ${userId} THEN 'OWNER' ELSE 'VIEWER' END
+        ) as role_type,
         (SELECT COUNT(*) FROM logical_block_slots lbs WHERE lbs.note_id = n.note_id) as blocks_count,
         (SELECT COUNT(*) FROM branches b WHERE b.note_id = n.note_id AND b.is_main = FALSE) as branches_count,
         (SELECT COUNT(*) FROM issues i WHERE i.note_id = n.note_id AND i.status IN ('OPEN', 'IN_PROGRESS')) as open_issues_count
       FROM notes n
-      INNER JOIN collaborator_roles cr ON cr.resource_id = n.note_id
       INNER JOIN resources r ON r.resource_id = n.note_id
+      INNER JOIN notebooks nb ON nb.notebook_id = n.notebook_id
       LEFT JOIN editions e ON e.edition_id = n.default_edition_id
       WHERE n.notebook_id = ${notebookId}
-        AND cr.user_id = ${userId}
         AND n.deleted_at IS NULL
+        AND (
+          nb.owner_id = ${userId}
+          OR n.visibility = 'PUBLIC'
+          OR nb.visibility = 'PUBLIC'
+          OR EXISTS (
+            SELECT 1 FROM collaborator_roles cr 
+            WHERE (cr.resource_id = n.note_id OR cr.resource_id = n.notebook_id)
+              AND cr.user_id = ${userId}
+          )
+        )
       ORDER BY n.display_order ASC, r.created_at DESC
     `;
 
@@ -383,10 +396,10 @@ export async function deleteNote(noteId: string, userId: string) {
       return { success: false, error: 'Only owners can delete notes' };
     }
 
-    // Soft delete - could also use a deleted_at timestamp
+    // Soft delete - set deleted_at timestamp
     await sql`
       UPDATE notes
-      SET visibility = 'PRIVATE'
+      SET deleted_at = NOW()
       WHERE note_id = ${noteId}
     `;
 
@@ -428,16 +441,28 @@ export async function getNote(noteId: string, userId?: string) {
         n.notebook_id,
         e.edition_name as default_edition,
         e.edition_id as default_edition_id,
-        cr.role_type,
+        COALESCE(
+          (SELECT cr_note.role_type FROM collaborator_roles cr_note WHERE cr_note.resource_id = n.note_id AND cr_note.user_id = ${userId} LIMIT 1),
+          (SELECT cr_nb.role_type FROM collaborator_roles cr_nb WHERE cr_nb.resource_id = n.notebook_id AND cr_nb.user_id = ${userId} LIMIT 1),
+          CASE WHEN nb.owner_id = ${userId} THEN 'OWNER' ELSE 'VIEWER' END
+        ) as role_type,
         nb.title as notebook_title
       FROM notes n
-      INNER JOIN collaborator_roles cr ON cr.resource_id = n.note_id
       INNER JOIN resources r ON r.resource_id = n.note_id
       INNER JOIN notebooks nb ON nb.notebook_id = n.notebook_id
       LEFT JOIN editions e ON e.edition_id = n.default_edition_id
       WHERE n.note_id = ${noteId}
-        AND cr.user_id = ${userId}
         AND n.deleted_at IS NULL
+        AND (
+          nb.owner_id = ${userId}
+          OR n.visibility = 'PUBLIC'
+          OR nb.visibility = 'PUBLIC'
+          OR EXISTS (
+            SELECT 1 FROM collaborator_roles cr 
+            WHERE (cr.resource_id = n.note_id OR cr.resource_id = n.notebook_id)
+              AND cr.user_id = ${userId}
+          )
+        )
     `;
 
     if (!note) {
@@ -454,7 +479,10 @@ export async function getNote(noteId: string, userId?: string) {
 /**
  * Get note with blocks from a specific branch (for editing)
  */
-export async function getNoteWithBlocks(noteId: string, branchId?: string) {
+export async function getNoteWithBlocks(
+  noteId: string, 
+  branchId?: string
+): Promise<{ success: boolean; note?: any; error?: string }> {
   try {
     // Get current user from cookie
     const { cookies: getCookies } = await import('next/headers');
@@ -566,14 +594,27 @@ export async function getNotebookNotesWithContent(notebookId: string, userId?: s
         r.created_at,
         e.edition_name as default_edition,
         e.pinned_commit_id,
-        cr.role_type
+        COALESCE(
+          (SELECT cr_note.role_type FROM collaborator_roles cr_note WHERE cr_note.resource_id = n.note_id AND cr_note.user_id = ${userId} LIMIT 1),
+          (SELECT cr_nb.role_type FROM collaborator_roles cr_nb WHERE cr_nb.resource_id = n.notebook_id AND cr_nb.user_id = ${userId} LIMIT 1),
+          CASE WHEN nb.owner_id = ${userId} THEN 'OWNER' ELSE 'VIEWER' END
+        ) as role_type
       FROM notes n
-      INNER JOIN collaborator_roles cr ON cr.resource_id = n.note_id
       INNER JOIN resources r ON r.resource_id = n.note_id
+      INNER JOIN notebooks nb ON nb.notebook_id = n.notebook_id
       LEFT JOIN editions e ON e.edition_id = n.default_edition_id
       WHERE n.notebook_id = ${notebookId}
-        AND cr.user_id = ${userId}
         AND n.deleted_at IS NULL
+        AND (
+          nb.owner_id = ${userId}
+          OR n.visibility = 'PUBLIC'
+          OR nb.visibility = 'PUBLIC'
+          OR EXISTS (
+            SELECT 1 FROM collaborator_roles cr 
+            WHERE (cr.resource_id = n.note_id OR cr.resource_id = n.notebook_id)
+              AND cr.user_id = ${userId}
+          )
+        )
       ORDER BY n.display_order ASC, r.created_at DESC
     `;
 
@@ -648,5 +689,291 @@ export async function getNotebookNotesWithContent(notebookId: string, userId?: s
   } catch (error) {
     console.error('Error fetching notebook notes with content:', error);
     return { success: false, error: 'Failed to fetch notes' };
+  }
+}
+
+/**
+ * Fork a note to a target notebook
+ * 
+ * Demonstrates Content-Addressed Storage (CAS):
+ * 1. Creates a new resource and note with forked_from_note_id pointing to the original
+ * 2. Clones logical_block_slots
+ * 3. Creates new block_version_contents referencing the IDENTICAL content_blobs hashes
+ *    (ZERO duplicated content bytes stored in the database!)
+ * 4. Creates an initial main branch and commit with full manifest
+ * 5. Creates a default edition
+ */
+export async function forkNote({
+  noteId,
+  targetNotebookId,
+  newTitle,
+  userId,
+}: {
+  noteId: string;
+  targetNotebookId: string;
+  newTitle?: string;
+  userId: string;
+}) {
+  try {
+    // 1. Validate target notebook access
+    const [notebookAccess] = await sql`
+      SELECT role_type 
+      FROM collaborator_roles 
+      WHERE resource_id = ${targetNotebookId}
+        AND user_id = ${userId}
+        AND role_type IN ('OWNER', 'MAINTAINER')
+    `;
+
+    if (!notebookAccess) {
+      return { success: false, error: 'You do not have write permission on the destination notebook' };
+    }
+
+    // 2. Fetch source note
+    const [sourceNote] = await sql`
+      SELECT n.note_id, n.title, n.visibility, n.notebook_id
+      FROM notes n
+      WHERE n.note_id = ${noteId}
+        AND n.deleted_at IS NULL
+    `;
+
+    if (!sourceNote) {
+      return { success: false, error: 'Source note not found' };
+    }
+
+    // 3. Find latest commit on main branch of source note
+    const [sourceMain] = await sql`
+      SELECT b.branch_id
+      FROM branches b
+      WHERE b.note_id = ${noteId}
+        AND b.is_main = TRUE
+      LIMIT 1
+    `;
+
+    if (!sourceMain) {
+      return { success: false, error: 'Source note main branch not found' };
+    }
+
+    const [latestCommit] = await sql`
+      SELECT c.commit_id
+      FROM commits c
+      WHERE c.branch_id = ${sourceMain.branch_id}
+      ORDER BY c.created_at DESC
+      LIMIT 1
+    `;
+
+    // 4. Fetch source blocks from latest commit manifest
+    let sourceManifest: Array<{
+      slot_id: string;
+      block_type: string;
+      lexorank_key: string;
+      content_blob_hash: string;
+    }> = [];
+
+    if (latestCommit) {
+      sourceManifest = (await sql`
+        SELECT 
+          cm.slot_id,
+          lbs.block_type,
+          lbs.lexorank_key,
+          bvc.content_blob_hash
+        FROM commit_manifests cm
+        JOIN logical_block_slots lbs ON lbs.slot_id = cm.slot_id
+        JOIN block_version_contents bvc ON bvc.version_id = cm.version_id
+        WHERE cm.commit_id = ${latestCommit.commit_id}
+        ORDER BY lbs.lexorank_key ASC
+      `) as any;
+    }
+
+    // 5. Compute next display order in target notebook
+    const [orderResult] = await sql`
+      SELECT COALESCE(MAX(display_order), -1) + 1 as next_order
+      FROM notes
+      WHERE notebook_id = ${targetNotebookId}
+        AND deleted_at IS NULL
+    `;
+    const nextOrder = orderResult?.next_order ?? 0;
+
+    // 6. Create new resource entry for note (ISA hierarchy)
+    const [newResource] = await sql`
+      INSERT INTO resources (resource_type)
+      VALUES ('NOTE')
+      RETURNING resource_id
+    `;
+
+    const titleToUse = (newTitle && newTitle.trim()) || `${sourceNote.title} (Fork)`;
+
+    // 7. Create forked note
+    const [forkedNote] = await sql`
+      INSERT INTO notes (
+        note_id,
+        notebook_id,
+        title,
+        visibility,
+        display_order,
+        forked_from_note_id
+      )
+      VALUES (
+        ${newResource.resource_id},
+        ${targetNotebookId},
+        ${titleToUse},
+        'PUBLIC',
+        ${nextOrder},
+        ${noteId}
+      )
+      RETURNING note_id, title
+    `;
+
+    // 8. Grant OWNER role to user on new note
+    await sql`
+      INSERT INTO collaborator_roles (
+        user_id,
+        resource_id,
+        role_type,
+        granted_by
+      )
+      VALUES (
+        ${userId},
+        ${forkedNote.note_id},
+        'OWNER',
+        ${userId}
+      )
+    `;
+
+    // 9. Create main branch for forked note
+    const [mainBranch] = await sql`
+      INSERT INTO branches (
+        note_id,
+        branch_name,
+        is_main,
+        is_merged
+      )
+      VALUES (
+        ${forkedNote.note_id},
+        'main',
+        TRUE,
+        FALSE
+      )
+      RETURNING branch_id
+    `;
+
+    // 10. Clone slots and versions using identical content blob hashes (Zero-cost CAS!)
+    const clonedEntries: Array<{ slot_id: string; version_id: string }> = [];
+
+    for (const item of sourceManifest) {
+      // Create new slot
+      const [newSlot] = await sql`
+        INSERT INTO logical_block_slots (
+          note_id,
+          lexorank_key,
+          block_type
+        )
+        VALUES (
+          ${forkedNote.note_id},
+          ${item.lexorank_key},
+          ${item.block_type}
+        )
+        RETURNING slot_id
+      `;
+
+      // Create new version referencing the SAME content_blob_hash
+      const [newVersion] = await sql`
+        INSERT INTO block_version_contents (
+          slot_id,
+          author_id,
+          content_blob_hash
+        )
+        VALUES (
+          ${newSlot.slot_id},
+          ${userId},
+          ${item.content_blob_hash}
+        )
+        RETURNING version_id
+      `;
+
+      clonedEntries.push({
+        slot_id: newSlot.slot_id,
+        version_id: newVersion.version_id,
+      });
+    }
+
+    // 11. Create initial commit for forked note
+    const commitHash = createHash('sha256')
+      .update(`fork-${forkedNote.note_id}-${Date.now()}`)
+      .digest('hex');
+
+    const [forkCommit] = await sql`
+      INSERT INTO commits (
+        branch_id,
+        parent_commit_id,
+        author_id,
+        commit_message,
+        commit_hash
+      )
+      VALUES (
+        ${mainBranch.branch_id},
+        NULL,
+        ${userId},
+        ${`Forked from "${sourceNote.title}"`},
+        ${commitHash}
+      )
+      RETURNING commit_id
+    `;
+
+    // 12. Create manifests
+    for (const entry of clonedEntries) {
+      await sql`
+        INSERT INTO commit_manifests (
+          commit_id,
+          slot_id,
+          version_id
+        )
+        VALUES (
+          ${forkCommit.commit_id},
+          ${entry.slot_id},
+          ${entry.version_id}
+        )
+      `;
+    }
+
+    // 13. Create default edition
+    const shareCode = `fork-${Math.random().toString(36).substring(2, 8)}`;
+    const [edition] = await sql`
+      INSERT INTO editions (
+        note_id,
+        edition_name,
+        share_code,
+        pinned_commit_id,
+        is_standard,
+        created_by
+      )
+      VALUES (
+        ${forkedNote.note_id},
+        'v1.0 Forked',
+        ${shareCode},
+        ${forkCommit.commit_id},
+        TRUE,
+        ${userId}
+      )
+      RETURNING edition_id
+    `;
+
+    await sql`
+      UPDATE notes
+      SET default_edition_id = ${edition.edition_id}
+      WHERE note_id = ${forkedNote.note_id}
+    `;
+
+    revalidatePath('/dashboard');
+    revalidatePath(`/dashboard/notebooks/${targetNotebookId}`);
+
+    return {
+      success: true,
+      noteId: forkedNote.note_id,
+      notebookId: targetNotebookId,
+      title: forkedNote.title,
+    };
+  } catch (error: any) {
+    console.error('Error in forkNote:', error);
+    return { success: false, error: error.message || 'Failed to fork note' };
   }
 }

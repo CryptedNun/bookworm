@@ -1,8 +1,8 @@
 'use client';
 
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import Link from 'next/link';
-import { useRouter } from 'next/navigation';
+import { useRouter, useSearchParams } from 'next/navigation';
 import {
   ArrowLeft,
   GitBranch,
@@ -18,11 +18,13 @@ import {
   Loader2,
   Eye,
   Code,
+  Columns,
 } from 'lucide-react';
 import { mergeBranch, deleteBranch, compareBranches } from '@/actions/branches';
 import type { Branch, BranchWithCommits } from '@/actions/branches';
 import type { User as AuthUser } from '@/actions/auth';
 import type { Note } from '@/actions/notes';
+import MergeReviewDiffModal from '@/components/branches/MergeReviewDiffModal';
 
 interface BranchesClientProps {
   note: Note;
@@ -33,20 +35,65 @@ interface BranchesClientProps {
 
 export default function BranchesClient({ note, branches, notebookId, user }: BranchesClientProps) {
   const router = useRouter();
+  const searchParams = useSearchParams();
+  const autoReviewBranchId = searchParams.get('reviewBranchId');
+
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [success, setSuccess] = useState<string | null>(null);
   const [expandedBranch, setExpandedBranch] = useState<string | null>(null);
-  const [showMergeModal, setShowMergeModal] = useState<string | null>(null);
-  const [mergeMessage, setMergeMessage] = useState('');
-  const [comparing, setComparing] = useState<string | null>(null);
+
+  // Modern Review & Diff Modal State
+  const [reviewBranch, setReviewBranch] = useState<BranchWithCommits | null>(null);
+  const [isReviewModalOpen, setIsReviewModalOpen] = useState(false);
+  const [isLoadingComparison, setIsLoadingComparison] = useState(false);
   const [comparison, setComparison] = useState<any>(null);
 
   const mainBranch = branches.find(b => b.is_main);
   const activeBranches = branches.filter(b => !b.is_main && !b.is_merged);
   const mergedBranches = branches.filter(b => !b.is_main && b.is_merged);
 
-  const handleMergeBranch = async (branchId: string, branchName: string) => {
+  const canMerge = note.role_type === 'OWNER' || note.role_type === 'MAINTAINER';
+
+  const openReviewModal = async (branch: BranchWithCommits) => {
+    setReviewBranch(branch);
+    setIsReviewModalOpen(true);
+    setIsLoadingComparison(true);
+    setError(null);
+
+    try {
+      const result = await compareBranches({
+        noteId: note.note_id,
+        sourceBranchId: branch.branch_id,
+      });
+
+      if (result.success && result.comparison) {
+        setComparison({
+          branchId: branch.branch_id,
+          branchName: branch.branch_name,
+          ...result.comparison,
+        });
+      } else {
+        setError(result.error || 'Failed to compare branches');
+      }
+    } catch (err: any) {
+      setError(err.message || 'An error occurred while computing branch diff');
+    } finally {
+      setIsLoadingComparison(false);
+    }
+  };
+
+  // Auto-open review modal if navigated with ?reviewBranchId=...
+  useEffect(() => {
+    if (autoReviewBranchId && branches.length > 0) {
+      const target = branches.find((b) => b.branch_id === autoReviewBranchId);
+      if (target) {
+        openReviewModal(target);
+      }
+    }
+  }, [autoReviewBranchId, branches]);
+
+  const handleMergeBranch = async (branchId: string, branchName: string, customMessage?: string) => {
     setLoading(true);
     setError(null);
     setSuccess(null);
@@ -54,7 +101,7 @@ export default function BranchesClient({ note, branches, notebookId, user }: Bra
     try {
       const result = await mergeBranch({
         branchId,
-        mergeMessage: mergeMessage || undefined,
+        mergeMessage: customMessage || undefined,
       });
 
       if (result.success) {
@@ -63,8 +110,9 @@ export default function BranchesClient({ note, branches, notebookId, user }: Bra
             result.warning ? ` ${result.warning}` : ''
           }`
         );
-        setShowMergeModal(null);
-        setMergeMessage('');
+        setIsReviewModalOpen(false);
+        setReviewBranch(null);
+        setComparison(null);
         router.refresh();
       } else {
         setError(result.error || 'Failed to merge branch');
@@ -96,28 +144,6 @@ export default function BranchesClient({ note, branches, notebookId, user }: Bra
       setError(err.message || 'An error occurred');
     } finally {
       setLoading(false);
-    }
-  };
-
-  const handleCompareBranch = async (branchId: string) => {
-    setComparing(branchId);
-    setError(null);
-
-    try {
-      const result = await compareBranches({
-        noteId: note.note_id,
-        sourceBranchId: branchId,
-      });
-
-      if (result.success && result.comparison) {
-        setComparison({ branchId, ...result.comparison });
-      } else {
-        setError(result.error || 'Failed to compare branches');
-      }
-    } catch (err: any) {
-      setError(err.message || 'An error occurred');
-    } finally {
-      setComparing(null);
     }
   };
 
@@ -206,13 +232,31 @@ export default function BranchesClient({ note, branches, notebookId, user }: Bra
 
       {/* Main Content */}
       <div className="max-w-7xl mx-auto px-6 py-8">
+        {/* Version Control Guide Banner */}
+        <div className="mb-8 p-4 rounded-xl bg-gradient-to-r from-blue-500/10 via-zinc-900 to-zinc-900 border border-blue-500/20 text-xs text-zinc-300">
+          <div className="flex items-start gap-3">
+            <div className="p-2 rounded-lg bg-blue-500/20 text-blue-400 border border-blue-500/30 shrink-0">
+              <GitMerge className="w-4 h-4" />
+            </div>
+            <div className="space-y-1">
+              <div className="font-semibold text-zinc-100 flex items-center gap-2">
+                <span>Understanding Branches & Merges in BookWorm</span>
+                <span className="px-1.5 py-0.5 rounded text-[10px] bg-blue-500/20 text-blue-300 border border-blue-500/30">Zero Conflicts</span>
+              </div>
+              <p className="text-zinc-400 leading-relaxed">
+                Every note has one canonical <strong>Main</strong> branch. When contributors open an issue to propose block edits, BookWorm creates an <strong>Attempt Branch</strong>. Maintainers review changes with <strong>Compare</strong> and click <strong>Merge</strong> to designate the winning attempt. Merging automatically creates a merge commit on main, carries forward the block's new version, closes the issue, and unlocks the slot!
+              </p>
+            </div>
+          </div>
+        </div>
+
         <div className="space-y-8">
           {/* Main Branch */}
           {mainBranch && (
             <section>
               <h2 className="text-sm font-semibold text-zinc-400 uppercase tracking-wide mb-4 flex items-center gap-2">
-                <GitBranch className="w-4 h-4" />
-                Main Branch
+                <GitBranch className="w-4 h-4 text-emerald-400" />
+                Main Branch (Canonical)
               </h2>
 
               <BranchCard
@@ -229,8 +273,11 @@ export default function BranchesClient({ note, branches, notebookId, user }: Bra
           {activeBranches.length > 0 && (
             <section>
               <h2 className="text-sm font-semibold text-zinc-400 uppercase tracking-wide mb-4 flex items-center gap-2">
-                <GitBranch className="w-4 h-4" />
-                Active Branches ({activeBranches.length})
+                <GitBranch className="w-4 h-4 text-amber-400" />
+                Unmerged Attempt Branches ({activeBranches.length})
+                <span className="text-[10px] px-2 py-0.5 rounded-full bg-amber-500/10 text-amber-400 border border-amber-500/20 font-normal">
+                  Awaiting Review
+                </span>
               </h2>
 
               <div className="space-y-4">
@@ -240,11 +287,11 @@ export default function BranchesClient({ note, branches, notebookId, user }: Bra
                     branch={branch}
                     onExpand={() => setExpandedBranch(expandedBranch === branch.branch_id ? null : branch.branch_id)}
                     isExpanded={expandedBranch === branch.branch_id}
-                    onMerge={() => setShowMergeModal(branch.branch_id)}
-                    onDelete={() => handleDeleteBranch(branch.branch_id, branch.branch_name)}
-                    onCompare={() => handleCompareBranch(branch.branch_id)}
+                    onMerge={canMerge ? () => openReviewModal(branch) : undefined}
+                    onDelete={(canMerge || branch.attempted_by === user.user_id) ? () => handleDeleteBranch(branch.branch_id, branch.branch_name) : undefined}
+                    onCompare={() => openReviewModal(branch)}
                     onEdit={() => router.push(`/dashboard/notebooks/${notebookId}/notes/${note.note_id}/edit?branch=${branch.branch_id}`)}
-                    comparing={comparing === branch.branch_id}
+                    comparing={isLoadingComparison && reviewBranch?.branch_id === branch.branch_id}
                   />
                 ))}
               </div>
@@ -255,7 +302,7 @@ export default function BranchesClient({ note, branches, notebookId, user }: Bra
           {mergedBranches.length > 0 && (
             <section>
               <h2 className="text-sm font-semibold text-zinc-400 uppercase tracking-wide mb-4 flex items-center gap-2">
-                <CheckCircle className="w-4 h-4" />
+                <CheckCircle className="w-4 h-4 text-emerald-400" />
                 Merged Branches ({mergedBranches.length})
               </h2>
 
@@ -266,6 +313,7 @@ export default function BranchesClient({ note, branches, notebookId, user }: Bra
                     branch={branch}
                     onExpand={() => setExpandedBranch(expandedBranch === branch.branch_id ? null : branch.branch_id)}
                     isExpanded={expandedBranch === branch.branch_id}
+                    onCompare={() => openReviewModal(branch)}
                     isMerged
                   />
                 ))}
@@ -289,182 +337,26 @@ export default function BranchesClient({ note, branches, notebookId, user }: Bra
             </div>
           )}
         </div>
-
-        {/* Comparison View */}
-        {comparison && comparison.branchId && (
-          <div className="fixed inset-0 bg-black/80 backdrop-blur-sm flex items-center justify-center z-50 p-6">
-            <div className="bg-zinc-900 rounded-xl border border-zinc-800 max-w-4xl w-full max-h-[80vh] overflow-hidden flex flex-col">
-              <div className="p-6 border-b border-zinc-800 flex items-center justify-between">
-                <div>
-                  <h2 className="text-xl font-bold flex items-center gap-2">
-                    <Code className="w-5 h-5" />
-                    Branch Comparison
-                  </h2>
-                  <p className="text-sm text-zinc-500 mt-1">
-                    Comparing with {comparison.target_branch_name}
-                  </p>
-                </div>
-                <button
-                  onClick={() => setComparison(null)}
-                  className="p-2 rounded-lg hover:bg-zinc-800 text-zinc-400 hover:text-zinc-100"
-                >
-                  <XCircle className="w-5 h-5" />
-                </button>
-              </div>
-
-              <div className="p-6 overflow-y-auto flex-1">
-                {/* Stats */}
-                <div className="grid grid-cols-4 gap-4 mb-6">
-                  <div className="bg-zinc-800 rounded-lg p-4">
-                    <div className="text-2xl font-bold text-emerald-400">{comparison.stats.added}</div>
-                    <div className="text-xs text-zinc-500">Added</div>
-                  </div>
-                  <div className="bg-zinc-800 rounded-lg p-4">
-                    <div className="text-2xl font-bold text-blue-400">{comparison.stats.modified}</div>
-                    <div className="text-xs text-zinc-500">Modified</div>
-                  </div>
-                  <div className="bg-zinc-800 rounded-lg p-4">
-                    <div className="text-2xl font-bold text-red-400">{comparison.stats.deleted}</div>
-                    <div className="text-xs text-zinc-500">Deleted</div>
-                  </div>
-                  <div className="bg-zinc-800 rounded-lg p-4">
-                    <div className="text-2xl font-bold text-zinc-400">{comparison.stats.unchanged}</div>
-                    <div className="text-xs text-zinc-500">Unchanged</div>
-                  </div>
-                </div>
-
-                {/* Changes */}
-                <div className="space-y-3">
-                  {comparison.changes
-                    .filter((c: any) => c.change_type !== 'unchanged')
-                    .map((change: any, idx: number) => (
-                      <div
-                        key={idx}
-                        className={`rounded-lg border p-4 ${
-                          change.change_type === 'added'
-                            ? 'border-emerald-500/30 bg-emerald-500/5'
-                            : change.change_type === 'deleted'
-                            ? 'border-red-500/30 bg-red-500/5'
-                            : 'border-blue-500/30 bg-blue-500/5'
-                        }`}
-                      >
-                        <div className="flex items-center gap-2 mb-2">
-                          <span
-                            className={`text-xs font-mono px-2 py-1 rounded ${
-                              change.change_type === 'added'
-                                ? 'bg-emerald-500/20 text-emerald-400'
-                                : change.change_type === 'deleted'
-                                ? 'bg-red-500/20 text-red-400'
-                                : 'bg-blue-500/20 text-blue-400'
-                            }`}
-                          >
-                            {change.change_type}
-                          </span>
-                          <span className="text-xs text-zinc-500">
-                            {change.source_type || change.target_type}
-                          </span>
-                        </div>
-                        <div className="space-y-2">
-                          {change.target_content && change.change_type !== 'added' && (
-                            <div className="text-sm text-red-400 line-through opacity-75">
-                              - {change.target_content.substring(0, 150)}
-                              {change.target_content.length > 150 ? '...' : ''}
-                            </div>
-                          )}
-                          {change.source_content && (
-                            <div className="text-sm text-emerald-400">
-                              {change.change_type === 'added' ? '+ ' : ''}
-                              {change.source_content.substring(0, 150)}
-                              {change.source_content.length > 150 ? '...' : ''}
-                            </div>
-                          )}
-                        </div>
-                      </div>
-                    ))}
-                </div>
-
-                {comparison.changes.filter((c: any) => c.change_type !== 'unchanged').length === 0 && (
-                  <div className="text-center py-8 text-zinc-500">
-                    <CheckCircle className="w-12 h-12 mx-auto mb-4 opacity-50" />
-                    <p>No changes detected</p>
-                  </div>
-                )}
-              </div>
-            </div>
-          </div>
-        )}
       </div>
 
-      {/* Merge Modal */}
-      {showMergeModal && (
-        <div className="fixed inset-0 bg-black/80 backdrop-blur-sm flex items-center justify-center z-50 p-6">
-          <div className="bg-zinc-900 rounded-xl border border-zinc-800 max-w-md w-full">
-            <div className="p-6 border-b border-zinc-800">
-              <h2 className="text-xl font-bold flex items-center gap-2">
-                <GitMerge className="w-5 h-5" />
-                Merge Branch
-              </h2>
-              <p className="text-sm text-zinc-500 mt-1">
-                Merge changes back into main branch
-              </p>
-            </div>
-
-            <div className="p-6 space-y-4">
-              <div>
-                <label className="block text-sm font-medium text-zinc-300 mb-2">
-                  Merge Message (Optional)
-                </label>
-                <textarea
-                  value={mergeMessage}
-                  onChange={(e) => setMergeMessage(e.target.value)}
-                  placeholder="Describe what this merge accomplishes..."
-                  rows={3}
-                  className="w-full px-4 py-2 rounded-lg bg-zinc-800 border border-zinc-700 focus:border-emerald-500 focus:outline-none text-zinc-100 resize-none"
-                />
-              </div>
-
-              <div className="bg-yellow-950/30 border border-yellow-900/50 rounded-lg p-4">
-                <p className="text-sm text-yellow-400 flex items-start gap-2">
-                  <AlertCircle className="w-4 h-4 flex-shrink-0 mt-0.5" />
-                  This will merge all changes into the main branch. If conflicts exist, branch changes will be preferred.
-                </p>
-              </div>
-
-              <div className="flex gap-3">
-                <button
-                  onClick={() => {
-                    const branch = branches.find(b => b.branch_id === showMergeModal);
-                    if (branch) handleMergeBranch(branch.branch_id, branch.branch_name);
-                  }}
-                  disabled={loading}
-                  className="flex-1 px-4 py-2 rounded-lg bg-emerald-500 hover:bg-emerald-400 text-zinc-950 font-medium transition-colors disabled:opacity-50 flex items-center justify-center gap-2"
-                >
-                  {loading ? (
-                    <>
-                      <Loader2 className="w-4 h-4 animate-spin" />
-                      Merging...
-                    </>
-                  ) : (
-                    <>
-                      <GitMerge className="w-4 h-4" />
-                      Merge
-                    </>
-                  )}
-                </button>
-                <button
-                  onClick={() => {
-                    setShowMergeModal(null);
-                    setMergeMessage('');
-                  }}
-                  disabled={loading}
-                  className="px-4 py-2 rounded-lg bg-zinc-800 hover:bg-zinc-700 text-zinc-300 transition-colors disabled:opacity-50"
-                >
-                  Cancel
-                </button>
-              </div>
-            </div>
-          </div>
-        </div>
+      {/* Modern Side-by-Side Merge Review & Diff Modal */}
+      {reviewBranch && (
+        <MergeReviewDiffModal
+          isOpen={isReviewModalOpen}
+          onClose={() => {
+            setIsReviewModalOpen(false);
+            setReviewBranch(null);
+            setComparison(null);
+          }}
+          branchId={reviewBranch.branch_id}
+          branchName={reviewBranch.branch_name}
+          noteTitle={note.title}
+          comparison={comparison}
+          isLoadingComparison={isLoadingComparison}
+          canMerge={canMerge && !reviewBranch.is_merged}
+          onConfirmMerge={(bId, bName, msg) => handleMergeBranch(bId, bName, msg)}
+          isMerging={loading}
+        />
       )}
     </div>
   );

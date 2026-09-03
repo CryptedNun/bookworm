@@ -72,11 +72,21 @@ async function checkEditPermission(
   noteId: string,
   branchId?: string
 ): Promise<{ canEdit: boolean; role: string }> {
-  // Get user's role on the note
+  // Get user's role on the note or its parent notebook
   const [permission] = await sql`
     SELECT role_type FROM collaborator_roles
     WHERE user_id = ${userId}
-    AND resource_id = ${noteId}
+    AND (
+      resource_id = ${noteId}
+      OR resource_id = (SELECT notebook_id FROM notes WHERE note_id = ${noteId})
+    )
+    ORDER BY CASE role_type 
+      WHEN 'OWNER' THEN 1 
+      WHEN 'MAINTAINER' THEN 2 
+      WHEN 'CONTRIBUTOR' THEN 3 
+      ELSE 4 
+    END
+    LIMIT 1
   ` as { role_type: string }[];
   
   if (!permission) {

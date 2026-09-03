@@ -14,47 +14,75 @@ import {
   Lock,
   Users,
   Calendar,
-  MessageSquare,
   Code,
+  X,
 } from 'lucide-react';
-import { createIssue, closeIssue, getIssueDetail } from '@/actions/issues';
+import { createIssue, closeIssue, contributeToIssue } from '@/actions/issues';
 import { mergeBranch } from '@/actions/branches';
 import type { Issue } from '@/actions/issues';
 import type { User as AuthUser } from '@/actions/auth';
 import type { Note } from '@/actions/notes';
 
+interface Block {
+  slot_id: string;
+  block_type: string;
+  content_text: string;
+  lexorank_key: string;
+}
+
 interface IssuesClientProps {
-  note: Note & {
-    blocks: Array<{
-      slot_id: string;
-      block_type: string;
-      content_text: string;
-      lexorank_key: string;
-    }>;
-  };
+  note: Note & { blocks: Block[] };
   issues: Issue[];
   notebookId: string;
   user: AuthUser;
+  initialSlotId?: string;
+  initialOpen?: boolean;
 }
 
-export default function IssuesClient({ note, issues, notebookId, user }: IssuesClientProps) {
+export default function IssuesClient({ 
+  note, 
+  issues, 
+  notebookId, 
+  user,
+  initialSlotId,
+  initialOpen = false,
+}: IssuesClientProps) {
   const router = useRouter();
-  const [showCreateModal, setShowCreateModal] = useState(false);
-  const [selectedBlock, setSelectedBlock] = useState<string | null>(null);
+  const [showCreateModal, setShowCreateModal] = useState(initialOpen || false);
+  const [selectedBlock, setSelectedBlock] = useState<string | null>(initialSlotId || null);
   const [issueTitle, setIssueTitle] = useState('');
   const [loading, setLoading] = useState(false);
+  const [contributingIssueId, setContributingIssueId] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [success, setSuccess] = useState<string | null>(null);
-  const [filter, setFilter] = useState<'all' | 'open' | 'in_progress' | 'closed'>('open');
+  const [filter, setFilter] = useState<'all' | 'active' | 'closed'>('all');
+
+  const canCreateIssue = ['OWNER', 'MAINTAINER', 'CONTRIBUTOR'].includes(note.role_type);
 
   const openIssues = issues.filter(i => ['OPEN', 'IN_PROGRESS'].includes(i.status));
   const closedIssues = issues.filter(i => ['CLOSED', 'MERGED'].includes(i.status));
 
   const filteredIssues = 
     filter === 'all' ? issues :
-    filter === 'open' ? issues.filter(i => i.status === 'OPEN') :
-    filter === 'in_progress' ? issues.filter(i => i.status === 'IN_PROGRESS') :
-    issues.filter(i => i.status === 'CLOSED');
+    filter === 'active' ? openIssues :
+    closedIssues;
+
+  const handleContributeToIssue = async (issueId: string) => {
+    setContributingIssueId(issueId);
+    setError(null);
+    try {
+      const result = await contributeToIssue(issueId);
+      if (result.success && result.branchId) {
+        router.push(`/dashboard/notebooks/${notebookId}/notes/${note.note_id}/edit?branch=${result.branchId}`);
+      } else {
+        setError(result.error || 'Failed to start contribution branch');
+      }
+    } catch (err: any) {
+      setError(err.message || 'Error creating attempt branch');
+    } finally {
+      setContributingIssueId(null);
+    }
+  };
 
   const handleCreateIssue = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -193,14 +221,16 @@ export default function IssuesClient({ note, issues, notebookId, user }: IssuesC
             </div>
           </div>
 
-          <button
-            onClick={() => setShowCreateModal(true)}
-            disabled={loading}
-            className="px-4 py-2 rounded-lg bg-emerald-500 hover:bg-emerald-400 text-zinc-950 text-sm font-medium transition-colors disabled:opacity-50 flex items-center gap-2"
-          >
-            <Plus className="w-4 h-4" />
-            New Issue
-          </button>
+          {canCreateIssue && (
+            <button
+              onClick={() => setShowCreateModal(true)}
+              disabled={loading}
+              className="px-4 py-2 rounded-lg bg-emerald-500 hover:bg-emerald-400 text-zinc-950 text-sm font-medium transition-colors disabled:opacity-50 flex items-center gap-2"
+            >
+              <Plus className="w-4 h-4" />
+              New Issue
+            </button>
+          )}
         </div>
 
         {/* Status Messages */}
@@ -242,24 +272,14 @@ export default function IssuesClient({ note, issues, notebookId, user }: IssuesC
               All ({issues.length})
             </button>
             <button
-              onClick={() => setFilter('open')}
+              onClick={() => setFilter('active')}
               className={`px-4 py-3 text-sm font-medium border-b-2 transition-colors ${
-                filter === 'open'
+                filter === 'active'
                   ? 'border-emerald-500 text-emerald-400'
                   : 'border-transparent text-zinc-400 hover:text-zinc-200'
               }`}
             >
-              Open ({issues.filter(i => i.status === 'OPEN').length})
-            </button>
-            <button
-              onClick={() => setFilter('in_progress')}
-              className={`px-4 py-3 text-sm font-medium border-b-2 transition-colors ${
-                filter === 'in_progress'
-                  ? 'border-emerald-500 text-emerald-400'
-                  : 'border-transparent text-zinc-400 hover:text-zinc-200'
-              }`}
-            >
-              In Progress ({issues.filter(i => i.status === 'IN_PROGRESS').length})
+              Active ({openIssues.length})
             </button>
             <button
               onClick={() => setFilter('closed')}
@@ -269,7 +289,7 @@ export default function IssuesClient({ note, issues, notebookId, user }: IssuesC
                   : 'border-transparent text-zinc-400 hover:text-zinc-200'
               }`}
             >
-              Closed ({closedIssues.length})
+              Resolved ({closedIssues.length})
             </button>
           </div>
         </div>
@@ -277,6 +297,24 @@ export default function IssuesClient({ note, issues, notebookId, user }: IssuesC
 
       {/* Main Content */}
       <div className="max-w-7xl mx-auto px-6 py-8">
+        {/* Version Control Guide Banner */}
+        <div className="mb-6 p-4 rounded-xl bg-gradient-to-r from-amber-500/10 via-zinc-900 to-zinc-900 border border-amber-500/20 text-xs text-zinc-300">
+          <div className="flex items-start gap-3">
+            <div className="p-2 rounded-lg bg-amber-500/20 text-amber-400 border border-amber-500/30 shrink-0">
+              <Lock className="w-4 h-4" />
+            </div>
+            <div className="space-y-1">
+              <div className="font-semibold text-zinc-100 flex items-center gap-2">
+                <span>How Block-Level Issues & Branching Work in BookWorm</span>
+                <span className="px-1.5 py-0.5 rounded text-[10px] bg-amber-500/20 text-amber-300 border border-amber-500/30">Zero Conflicts</span>
+              </div>
+              <p className="text-zinc-400 leading-relaxed">
+                Unlike traditional Git where branches span entire files, BookWorm locks a <strong>single block slot</strong>. Multiple contributors can work on separate blocks simultaneously without ever producing a merge conflict. When you create an issue, BookWorm automatically initializes an isolated attempt branch for your proposed changes!
+              </p>
+            </div>
+          </div>
+        </div>
+
         {filteredIssues.length === 0 ? (
           <div className="text-center py-20">
             <Lock className="w-16 h-16 mx-auto mb-4 text-zinc-700" />
@@ -288,7 +326,7 @@ export default function IssuesClient({ note, issues, notebookId, user }: IssuesC
                 ? 'Create an issue to request changes to a specific block'
                 : `Change the filter to see other issues`}
             </p>
-            {filter === 'all' && (
+            {filter === 'all' && canCreateIssue && (
               <button
                 onClick={() => setShowCreateModal(true)}
                 className="px-6 py-3 rounded-lg bg-emerald-500 hover:bg-emerald-400 text-zinc-950 font-medium transition-colors inline-flex items-center gap-2"
@@ -304,6 +342,10 @@ export default function IssuesClient({ note, issues, notebookId, user }: IssuesC
               <IssueCard
                 key={issue.issue_id}
                 issue={issue}
+                canContribute={canCreateIssue}
+                canClose={issue.creator_id === user.user_id || ['OWNER', 'MAINTAINER'].includes(note.role_type)}
+                isContributing={contributingIssueId === issue.issue_id}
+                onContribute={() => handleContributeToIssue(issue.issue_id)}
                 onClose={() => handleCloseIssue(issue.issue_id, issue.title)}
                 onMerge={handleMergeBranch}
                 onView={() =>
@@ -331,16 +373,27 @@ export default function IssuesClient({ note, issues, notebookId, user }: IssuesC
               </p>
             </div>
 
-            <form onSubmit={handleCreateIssue} className="flex-1 overflow-y-auto p-6 space-y-4">
+            <form onSubmit={handleCreateIssue} className="flex-1 overflow-y-auto p-6 space-y-5">
+              {/* Zero-Conflict Explainer */}
+              <div className="p-3.5 rounded-xl bg-amber-950/30 border border-amber-800/40 text-xs text-amber-300 space-y-1">
+                <div className="flex items-center gap-1.5 font-semibold text-amber-200">
+                  <Lock className="w-3.5 h-3.5 text-amber-400" />
+                  <span>Locking Slot for Safe Collaboration</span>
+                </div>
+                <p className="text-[11px] text-amber-300/80 leading-relaxed">
+                  Choosing a block locks only that slot on <code className="text-zinc-200">main</code>. You will be redirected to an isolated attempt branch where you can edit the block safely. Once you're done, maintainers can merge your branch to unlock the block!
+                </p>
+              </div>
+
               <div>
                 <label className="block text-sm font-medium text-zinc-300 mb-2">
-                  Issue Title
+                  Issue Title / Proposal
                 </label>
                 <input
                   type="text"
                   value={issueTitle}
                   onChange={(e) => setIssueTitle(e.target.value)}
-                  placeholder="e.g., Update introduction paragraph"
+                  placeholder="e.g., Fix time complexity explanation in section 2"
                   className="w-full px-4 py-2 rounded-lg bg-zinc-800 border border-zinc-700 focus:border-emerald-500 focus:outline-none text-zinc-100"
                   required
                   autoFocus
@@ -348,10 +401,13 @@ export default function IssuesClient({ note, issues, notebookId, user }: IssuesC
               </div>
 
               <div>
-                <label className="block text-sm font-medium text-zinc-300 mb-3">
-                  Select Block to Edit
+                <label className="block text-sm font-medium text-zinc-300 mb-2">
+                  Select Target Block
                 </label>
-                <div className="space-y-2 max-h-96 overflow-y-auto">
+                <p className="text-xs text-zinc-500 mb-3">
+                  Click a block to target your proposed edit. Locked blocks are currently being edited on an active issue.
+                </p>
+                <div className="space-y-2.5 max-h-96 overflow-y-auto pr-1">
                   {note.blocks.map((block, idx) => {
                     const isLocked = issues.some(
                       (i) => i.target_slot_id === block.slot_id && ['OPEN', 'IN_PROGRESS'].includes(i.status)
@@ -363,28 +419,32 @@ export default function IssuesClient({ note, issues, notebookId, user }: IssuesC
                         type="button"
                         onClick={() => !isLocked && setSelectedBlock(block.slot_id)}
                         disabled={isLocked}
-                        className={`w-full p-4 rounded-lg border-2 text-left transition-all ${
+                        className={`w-full p-4 rounded-xl border-2 text-left transition-all ${
                           selectedBlock === block.slot_id
-                            ? 'border-emerald-500 bg-emerald-500/10'
+                            ? 'border-emerald-500 bg-emerald-500/10 shadow-sm'
                             : isLocked
-                            ? 'border-zinc-800 bg-zinc-900/50 opacity-50 cursor-not-allowed'
-                            : 'border-zinc-800 bg-zinc-900 hover:border-zinc-700'
+                            ? 'border-zinc-800/80 bg-zinc-900/40 opacity-50 cursor-not-allowed'
+                            : 'border-zinc-800 bg-zinc-900 hover:border-zinc-700 hover:bg-zinc-850'
                         }`}
                       >
                         <div className="flex items-start gap-3">
-                          <div className="flex-shrink-0 w-8 h-8 rounded-lg bg-zinc-800 flex items-center justify-center text-xs font-mono">
+                          <div className="flex-shrink-0 w-7 h-7 rounded-lg bg-zinc-800 flex items-center justify-center text-xs font-mono text-zinc-400">
                             {idx + 1}
                           </div>
                           <div className="flex-1 min-w-0">
-                            <div className="flex items-center gap-2 mb-1">
-                              <span className="text-xs font-mono text-zinc-500">
+                            <div className="flex items-center gap-2 mb-1.5 flex-wrap">
+                              <span className="text-xs font-mono text-zinc-400 font-medium">
                                 {getBlockTypeIcon(block.block_type)}
                                 {block.block_type}
                               </span>
-                              {isLocked && (
-                                <span className="text-xs px-2 py-0.5 rounded bg-red-500/20 text-red-400 border border-red-500/30 flex items-center gap-1">
+                              {isLocked ? (
+                                <span className="text-[10px] px-2 py-0.5 rounded bg-red-500/20 text-red-400 border border-red-500/30 flex items-center gap-1 font-medium">
                                   <Lock className="w-3 h-3" />
-                                  LOCKED
+                                  LOCKED BY ISSUE
+                                </span>
+                              ) : (
+                                <span className="text-[10px] px-2 py-0.5 rounded bg-emerald-500/10 text-emerald-400 border border-emerald-500/20 font-medium">
+                                  ✓ Available
                                 </span>
                               )}
                             </div>
@@ -441,6 +501,10 @@ export default function IssuesClient({ note, issues, notebookId, user }: IssuesC
 // Issue Card Component
 function IssueCard({
   issue,
+  canContribute,
+  canClose,
+  isContributing,
+  onContribute,
   onClose,
   onMerge,
   onView,
@@ -448,6 +512,10 @@ function IssueCard({
   getBlockTypeIcon,
 }: {
   issue: Issue;
+  canContribute: boolean;
+  canClose: boolean;
+  isContributing: boolean;
+  onContribute: () => void;
   onClose: () => void;
   onMerge: (branchId: string, title: string) => void;
   onView: () => void;
@@ -497,26 +565,32 @@ function IssueCard({
         </div>
 
         <div className="flex items-center gap-2">
-          {issue.status === 'IN_PROGRESS' && (
-            <>
-              <button
-                onClick={onView}
-                className="px-3 py-2 rounded-lg bg-zinc-800 hover:bg-zinc-700 text-zinc-300 text-sm transition-colors"
-              >
-                View Branches
-              </button>
-              <button
-                onClick={onClose}
-                className="px-3 py-2 rounded-lg bg-zinc-800 hover:bg-zinc-700 text-zinc-300 text-sm transition-colors"
-              >
-                Close Issue
-              </button>
-            </>
+          {canContribute && ['OPEN', 'IN_PROGRESS'].includes(issue.status) && (
+            <button
+              onClick={onContribute}
+              disabled={isContributing}
+              className="px-3.5 py-1.5 rounded-lg bg-emerald-600 hover:bg-emerald-500 text-zinc-950 text-xs font-bold transition-all flex items-center gap-1.5 shadow-sm active:scale-95 disabled:opacity-50"
+              title="Work on this issue by creating or opening your attempt branch"
+            >
+              <GitBranch className="w-3.5 h-3.5" />
+              <span>{isContributing ? 'Opening Branch...' : 'Contribute / Propose Fix'}</span>
+            </button>
           )}
-          {issue.status === 'OPEN' && (
+
+          {issue.status === 'IN_PROGRESS' && (
+            <button
+              onClick={onView}
+              className="px-3 py-1.5 rounded-lg bg-zinc-800 hover:bg-zinc-700 text-zinc-300 text-xs font-medium transition-colors flex items-center gap-1"
+            >
+              <Code className="w-3.5 h-3.5 text-purple-400" />
+              <span>View Branches</span>
+            </button>
+          )}
+
+          {canClose && ['OPEN', 'IN_PROGRESS'].includes(issue.status) && (
             <button
               onClick={onClose}
-              className="px-3 py-2 rounded-lg bg-zinc-800 hover:bg-zinc-700 text-zinc-300 text-sm transition-colors"
+              className="px-3 py-1.5 rounded-lg bg-zinc-800/80 hover:bg-red-950/40 text-zinc-400 hover:text-red-400 border border-zinc-700/50 hover:border-red-800/50 text-xs transition-colors"
             >
               Close Issue
             </button>

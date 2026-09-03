@@ -18,14 +18,14 @@ export function AuthCard() {
   const router = useRouter();
   const [tab, setTab] = useState<"signin" | "signup">("signin");
   const [usernameOrEmail, setUsernameOrEmail] = useState("alice@bookworm.dev");
-  const [password, setPassword] = useState("••••••••••••");
+  const [password, setPassword] = useState("password");
   const [fullName, setFullName] = useState("");
   const [signupEmail, setSignupEmail] = useState("");
   const [signupUsername, setSignupUsername] = useState("");
   const [signupPassword, setSignupPassword] = useState("");
   const [isLoading, setIsLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
-  const [dbStatus, setDbStatus] = useState<string | null>(null);
+  const [successMessage, setSuccessMessage] = useState<string | null>(null);
 
   const handleSignIn = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -33,15 +33,11 @@ export function AuthCard() {
     setError(null);
 
     try {
-      // Import dynamically to avoid server/client boundary issues
       const { signIn } = await import('@/actions/auth');
       const result = await signIn(usernameOrEmail, password);
 
       if (result.success) {
-        // Small delay to show success state
-        setTimeout(() => {
-          router.push('/dashboard');
-        }, 100);
+        router.push('/dashboard');
       } else {
         setError(result.error || 'Sign in failed');
         setIsLoading(false);
@@ -53,12 +49,39 @@ export function AuthCard() {
     }
   };
 
-  const handleSignUp = (e: React.FormEvent) => {
+  const handleSignUp = async (e: React.FormEvent) => {
     e.preventDefault();
     setIsLoading(true);
-    setTimeout(() => {
-      router.push("/dashboard");
-    }, 150);
+    setError(null);
+
+    try {
+      const { signUp } = await import('@/actions/auth');
+      const result = await signUp({
+        username: signupUsername,
+        email: signupEmail,
+        password: signupPassword,
+      });
+
+      if (result.success) {
+        setSuccessMessage('Account created successfully! Redirecting...');
+        setTimeout(() => {
+          router.push("/dashboard");
+        }, 300);
+      } else {
+        setError(result.error || 'Registration failed');
+        setIsLoading(false);
+      }
+    } catch (err: any) {
+      console.error('Registration error:', err);
+      setError(err.message || 'An unexpected error occurred during registration.');
+      setIsLoading(false);
+    }
+  };
+
+  const handleSelectDemoUser = (userEmail: string) => {
+    setUsernameOrEmail(userEmail);
+    setPassword("password");
+    setError(null);
   };
 
   const handleQuickDemo = async () => {
@@ -67,13 +90,10 @@ export function AuthCard() {
     
     try {
       const { signIn } = await import('@/actions/auth');
-      // Use alice's credentials for quick demo
-      const result = await signIn('alice@bookworm.dev', 'demo');
+      const result = await signIn('alice@bookworm.dev', 'password');
       
       if (result.success) {
-        setTimeout(() => {
-          router.push("/dashboard");
-        }, 100);
+        router.push("/dashboard");
       } else {
         setError('Demo login failed: ' + result.error);
         setIsLoading(false);
@@ -82,31 +102,6 @@ export function AuthCard() {
       console.error('Demo login error:', error);
       setError('Network error during demo login');
       setIsLoading(false);
-    }
-  };
-
-  const checkDatabase = async () => {
-    try {
-      const { verifyDatabase } = await import('@/actions/verify-db');
-      const result = await verifyDatabase();
-      
-      if (result.success && result.users) {
-        const status = `✅ Database Connected!\n\n` +
-          `Users: ${result.users.length}\n` +
-          result.users.map((u: any) => `  - ${u.username} (${u.email}) ${u.is_active ? '✓' : '✗'}`).join('\n') +
-          `\n\nNotebooks: ${result.notebooks_count}\n` +
-          `Notes: ${result.notes_count}`;
-        setDbStatus(status);
-        alert(status);
-      } else {
-        const status = `❌ Database Error:\n${result.error}`;
-        setDbStatus(status);
-        alert(status);
-      }
-    } catch (error: any) {
-      const status = `❌ Connection Error:\n${error.message}`;
-      setDbStatus(status);
-      alert(status);
     }
   };
 
@@ -193,8 +188,41 @@ export function AuthCard() {
               </div>
             )}
 
+            {/* Quick Demo User Switcher */}
+            <div className="space-y-2 pt-1 pb-2">
+              <div className="flex items-center justify-between text-[11px] text-zinc-400">
+                <span className="font-medium">Quick Demo Accounts (Password: "password")</span>
+                <span className="text-[10px] font-mono text-emerald-400">Salted PBKDF2</span>
+              </div>
+              <div className="grid grid-cols-2 gap-1.5">
+                {[
+                  { name: "Alice", email: "alice@bookworm.dev", role: "Owner" },
+                  { name: "Bob", email: "bob@bookworm.dev", role: "Maintainer" },
+                  { name: "Charlie", email: "charlie@bookworm.dev", role: "Contributor" },
+                  { name: "Diana", email: "diana@bookworm.dev", role: "Author" },
+                ].map((demoUser) => (
+                  <button
+                    key={demoUser.email}
+                    type="button"
+                    onClick={() => handleSelectDemoUser(demoUser.email)}
+                    className={`px-2.5 py-1.5 rounded-lg border text-left flex items-center justify-between gap-1.5 transition-all text-xs cursor-pointer ${
+                      usernameOrEmail === demoUser.email
+                        ? "bg-emerald-500/15 border-emerald-500/50 text-emerald-300 font-semibold"
+                        : "bg-zinc-950/60 border-zinc-800 text-zinc-300 hover:bg-zinc-800/80"
+                    }`}
+                  >
+                    <span className="truncate">{demoUser.name}</span>
+                    <span className="text-[9px] font-mono text-zinc-500 px-1 py-0.2 bg-zinc-800/80 rounded">
+                      {demoUser.role}
+                    </span>
+                  </button>
+                ))}
+              </div>
+            </div>
+
+            {/* Username or Email */}
             <div>
-              <label className="block text-xs font-semibold text-zinc-300 uppercase tracking-wider mb-2">
+              <label className="block text-xs font-semibold text-zinc-300 uppercase tracking-wider mb-1.5">
                 Username or Email Address
               </label>
               <div className="relative">
@@ -212,18 +240,15 @@ export function AuthCard() {
               </div>
             </div>
 
+            {/* Password */}
             <div>
-              <div className="flex items-center justify-between mb-2">
+              <div className="flex items-center justify-between mb-1.5">
                 <label className="text-xs font-semibold text-zinc-300 uppercase tracking-wider">
                   Password
                 </label>
-                <button
-                  type="button"
-                  onClick={() => alert("Password reset will be enabled when database auth is configured.")}
-                  className="text-xs text-emerald-400 hover:text-emerald-300 transition-colors"
-                >
-                  Forgot password?
-                </button>
+                <span className="text-[11px] text-zinc-500">
+                  Default: <code className="text-emerald-400 font-mono">password</code>
+                </span>
               </div>
               <div className="relative">
                 <div className="absolute inset-y-0 left-0 pl-3.5 flex items-center pointer-events-none text-zinc-500">
@@ -247,15 +272,15 @@ export function AuthCard() {
                   defaultChecked
                   className="w-4 h-4 rounded border-zinc-700 bg-zinc-950 text-emerald-500 focus:ring-0 focus:ring-offset-0 accent-emerald-500"
                 />
-                Remember this device
+                Remember this session
               </label>
-              <span className="flex items-center gap-1 text-zinc-500">
-                <ShieldCheck className="w-3.5 h-3.5 text-emerald-500" />
-                Localhost Mode
+              <span className="flex items-center gap-1 text-zinc-400 font-mono text-[10px]">
+                <ShieldCheck className="w-3.5 h-3.5 text-emerald-400" />
+                SHA-512 Salted
               </span>
             </div>
 
-            <div className="pt-2 space-y-3">
+            <div className="pt-2 space-y-2.5">
               <button
                 type="submit"
                 disabled={isLoading}
@@ -264,7 +289,7 @@ export function AuthCard() {
                 {isLoading ? (
                   <>
                     <span className="inline-block w-4 h-4 border-2 border-zinc-950 border-t-transparent rounded-full animate-spin" />
-                    <span>Signing in...</span>
+                    <span>Verifying credentials...</span>
                   </>
                 ) : (
                   <>
@@ -280,33 +305,8 @@ export function AuthCard() {
                 disabled={isLoading}
                 className="w-full py-2 px-4 rounded-xl bg-zinc-800/80 hover:bg-zinc-800 text-zinc-200 font-medium text-xs border border-zinc-700/60 transition-all flex items-center justify-center gap-2 cursor-pointer disabled:opacity-50 disabled:cursor-not-allowed"
               >
-                {isLoading ? (
-                  <>
-                    <span className="inline-block w-3 h-3 border-2 border-zinc-400 border-t-transparent rounded-full animate-spin" />
-                    <span>Loading...</span>
-                  </>
-                ) : (
-                  <>
-                    <Sparkles className="w-3.5 h-3.5 text-amber-400" />
-                    Instant Demo Access (as @alice)
-                  </>
-                )}
-              </button>
-
-              <button
-                type="button"
-                onClick={checkDatabase}
-                className="w-full py-2 px-4 rounded-xl bg-blue-900/30 hover:bg-blue-900/50 text-blue-300 font-medium text-xs border border-blue-700/40 transition-all flex items-center justify-center gap-2 cursor-pointer"
-              >
-                🔍 Verify Database Connection
-              </button>
-
-              <button
-                type="button"
-                onClick={clearSession}
-                className="w-full py-2 px-4 rounded-xl bg-amber-900/30 hover:bg-amber-900/50 text-amber-300 font-medium text-xs border border-amber-700/40 transition-all flex items-center justify-center gap-2 cursor-pointer"
-              >
-                🔄 Clear Session (Test Login Again)
+                <Sparkles className="w-3.5 h-3.5 text-amber-400" />
+                Instant Demo Sign In (as @alice)
               </button>
             </div>
           </form>
@@ -315,24 +315,23 @@ export function AuthCard() {
         {/* Tab 2: Create Account */}
         {tab === "signup" && (
           <form onSubmit={handleSignUp} className="p-6 sm:p-7 space-y-3.5">
-            <div>
-              <label className="block text-xs font-semibold text-zinc-300 uppercase tracking-wider mb-1.5">
-                Full Name
-              </label>
-              <div className="relative">
-                <div className="absolute inset-y-0 left-0 pl-3.5 flex items-center pointer-events-none text-zinc-500">
-                  <UserIcon className="w-4 h-4" />
+            {/* Error / Success Display */}
+            {error && (
+              <div className="p-3 rounded-lg bg-red-950/30 border border-red-500/30 text-red-400 text-sm flex items-start gap-2">
+                <span className="shrink-0">⚠️</span>
+                <div className="flex-1">
+                  <p className="font-semibold">Registration Failed</p>
+                  <p className="text-xs mt-0.5 text-red-300">{error}</p>
                 </div>
-                <input
-                  type="text"
-                  required
-                  value={fullName}
-                  onChange={(e) => setFullName(e.target.value)}
-                  placeholder="Alice Walker"
-                  className="w-full pl-10 pr-4 py-2 text-sm rounded-xl bg-zinc-950/70 border border-zinc-800 text-zinc-100 placeholder-zinc-500 focus:outline-none focus:ring-2 focus:ring-emerald-500/40 focus:border-emerald-500/50"
-                />
               </div>
-            </div>
+            )}
+
+            {successMessage && (
+              <div className="p-3 rounded-lg bg-emerald-950/30 border border-emerald-500/30 text-emerald-400 text-sm flex items-center gap-2">
+                <CheckCircle2 className="w-4 h-4 shrink-0 text-emerald-400" />
+                <p className="text-xs text-emerald-300">{successMessage}</p>
+              </div>
+            )}
 
             <div>
               <label className="block text-xs font-semibold text-zinc-300 uppercase tracking-wider mb-1.5">
@@ -347,7 +346,7 @@ export function AuthCard() {
                   required
                   value={signupUsername}
                   onChange={(e) => setSignupUsername(e.target.value)}
-                  placeholder="alice"
+                  placeholder="e.g. grace_hopper"
                   className="w-full pl-10 pr-4 py-2 text-sm rounded-xl bg-zinc-950/70 border border-zinc-800 text-zinc-100 placeholder-zinc-500 focus:outline-none focus:ring-2 focus:ring-emerald-500/40 focus:border-emerald-500/50 font-mono"
                 />
               </div>
@@ -366,7 +365,7 @@ export function AuthCard() {
                   required
                   value={signupEmail}
                   onChange={(e) => setSignupEmail(e.target.value)}
-                  placeholder="alice@example.com"
+                  placeholder="grace@example.com"
                   className="w-full pl-10 pr-4 py-2 text-sm rounded-xl bg-zinc-950/70 border border-zinc-800 text-zinc-100 placeholder-zinc-500 focus:outline-none focus:ring-2 focus:ring-emerald-500/40 focus:border-emerald-500/50"
                 />
               </div>
@@ -374,7 +373,7 @@ export function AuthCard() {
 
             <div>
               <label className="block text-xs font-semibold text-zinc-300 uppercase tracking-wider mb-1.5">
-                Create Password
+                Password
               </label>
               <div className="relative">
                 <div className="absolute inset-y-0 left-0 pl-3.5 flex items-center pointer-events-none text-zinc-500">
@@ -385,10 +384,13 @@ export function AuthCard() {
                   required
                   value={signupPassword}
                   onChange={(e) => setSignupPassword(e.target.value)}
-                  placeholder="Choose a strong password"
+                  placeholder="Minimum 6 characters"
                   className="w-full pl-10 pr-4 py-2 text-sm rounded-xl bg-zinc-950/70 border border-zinc-800 text-zinc-100 placeholder-zinc-500 focus:outline-none focus:ring-2 focus:ring-emerald-500/40 focus:border-emerald-500/50"
                 />
               </div>
+              <p className="text-[10px] text-zinc-500 mt-1">
+                Passwords are automatically hashed with a unique 16-byte cryptographic salt (PBKDF2 SHA-512).
+              </p>
             </div>
 
             <div className="pt-2">
@@ -415,7 +417,7 @@ export function AuthCard() {
           <div className="grid grid-cols-2 gap-2 text-xs text-zinc-400">
             <div className="flex items-center gap-1.5">
               <CheckCircle2 className="w-3.5 h-3.5 text-emerald-400 shrink-0" />
-              <span>LexoRank Block Ordering</span>
+              <span>Salted Password Security</span>
             </div>
             <div className="flex items-center gap-1.5">
               <CheckCircle2 className="w-3.5 h-3.5 text-emerald-400 shrink-0" />
@@ -423,11 +425,11 @@ export function AuthCard() {
             </div>
             <div className="flex items-center gap-1.5">
               <CheckCircle2 className="w-3.5 h-3.5 text-emerald-400 shrink-0" />
-              <span>Branch & Merge Edits</span>
+              <span>Branch & Merge Engine</span>
             </div>
             <div className="flex items-center gap-1.5">
               <CheckCircle2 className="w-3.5 h-3.5 text-emerald-400 shrink-0" />
-              <span>Granular Block Issues</span>
+              <span>Block-Level Issues</span>
             </div>
           </div>
         </div>

@@ -37,7 +37,17 @@ import {
   Settings,
   Clock,
   CheckCircle2,
+  GitMerge,
+  Eye,
+  Edit,
+  ArrowRight,
 } from "lucide-react";
+import VersionControlGuide from "@/components/dashboard/VersionControlGuide";
+import UnmergedBranchesWidget from "@/components/dashboard/UnmergedBranchesWidget";
+import StorageAndActivityWidget from "@/components/dashboard/StorageAndActivityWidget";
+import type { UnmergedBranchItem, DashboardNoteItem, StorageAnalytics, ActivityItem } from "@/actions/dashboard";
+import ForkNoteModal from "@/components/notes/ForkNoteModal";
+import { TopNav } from "@/components/dashboard/TopNav";
 
 // ==========================================
 // 1. DATA MODELS & SAMPLE DATA
@@ -103,517 +113,36 @@ export interface NotificationItem {
   unread: boolean;
 }
 
-// TODO: Remove this mock - temporary for child components
-// Child components (TopNav, LeftSidebar, etc.) still reference this
-// In Phase 2, we'll refactor to pass user data as props
-export const currentUser: User = {
-  id: 'usr-temp',
-  name: 'Loading...',
-  username: 'user',
-  email: 'user@bookworm.dev',
-  avatarUrl: 'https://images.unsplash.com/photo-1494790108377-be9c29b29330?w=150&auto=format&fit=crop&q=80',
-  bio: '',
-  role: 'OWNER',
-  joinedDate: 'January 2026',
-  capabilities: {
-    canCreateIssue: true,
-    canDeleteBranch: true,
-    canMergeBranch: true,
-    canAddContributor: true,
-  },
-  stats: {
-    notebooksCount: 0,
-    notesCount: 0,
-    contributedCount: 0,
-    issuesCount: 0,
-    commitsCount: 0,
-  },
-};
 
-export const sampleNotebooks: NotebookItem[] = [
-  {
-    id: 'nb-cs101',
-    title: 'CS 101 Study Notes',
-    description: 'Collaborative computer science fundamentals, algorithms, and data structures.',
-    visibility: 'PUBLIC',
-    role: 'OWNER',
-    notesCount: 4,
-    lastUpdated: '10m ago',
-    isStarred: true,
-    notes: [
-      {
-        id: 'note-trees',
-        notebookId: 'nb-cs101',
-        title: 'B-Trees and AVL Self-Balancing Trees',
-        visibility: 'PUBLIC',
-        role: 'OWNER',
-        defaultEdition: 'v2.1 Final',
-        lastUpdated: '10m ago',
-        blocksCount: 48,
-        branchesCount: 2,
-        openIssuesCount: 1,
-        isStarred: true,
-      },
-      {
-        id: 'note-graphs',
-        notebookId: 'nb-cs101',
-        title: 'Graph Algorithms & Dijkstra Shortest Path',
-        visibility: 'PUBLIC',
-        role: 'OWNER',
-        defaultEdition: 'v1.0 Stable',
-        lastUpdated: '2h ago',
-        blocksCount: 62,
-        branchesCount: 1,
-        openIssuesCount: 0,
-      },
-      {
-        id: 'note-dp',
-        notebookId: 'nb-cs101',
-        title: 'Dynamic Programming & Memoization Patterns',
-        visibility: 'PUBLIC',
-        role: 'OWNER',
-        defaultEdition: 'Draft',
-        lastUpdated: '1d ago',
-        blocksCount: 34,
-        branchesCount: 3,
-        openIssuesCount: 2,
-      },
-    ],
-  },
-  {
-    id: 'nb-web-arch',
-    title: 'Modern Web Architecture',
-    description: 'Next.js App Router, Server Components, and Database Optimization guides.',
-    visibility: 'PUBLIC',
-    role: 'OWNER',
-    notesCount: 3,
-    lastUpdated: '3h ago',
-    isStarred: true,
-    notes: [
-      {
-        id: 'note-next-rsc',
-        notebookId: 'nb-web-arch',
-        title: 'React 19 & Next.js Server Components In-Depth',
-        visibility: 'PUBLIC',
-        role: 'OWNER',
-        defaultEdition: 'v3.0 Release',
-        lastUpdated: '3h ago',
-        blocksCount: 85,
-        branchesCount: 2,
-        openIssuesCount: 0,
-        isStarred: true,
-      },
-      {
-        id: 'note-lexorank',
-        notebookId: 'nb-web-arch',
-        title: 'LexoRank 3-Layer Block Storage Architecture',
-        visibility: 'PUBLIC',
-        role: 'OWNER',
-        defaultEdition: 'v2.0 Pinned',
-        lastUpdated: '5h ago',
-        blocksCount: 110,
-        branchesCount: 4,
-        openIssuesCount: 1,
-      },
-    ],
-  },
-  {
-    id: 'nb-db-design',
-    title: 'Distributed Databases & Storage',
-    description: 'Content-addressable storage (SHA-256), manifests, and deduplication models.',
-    visibility: 'PRIVATE',
-    role: 'OWNER',
-    notesCount: 2,
-    lastUpdated: '2d ago',
-    notes: [
-      {
-        id: 'note-cas',
-        notebookId: 'nb-db-design',
-        title: 'Content-Addressed Blobs & Zero-Cost Forking',
-        visibility: 'PRIVATE',
-        role: 'OWNER',
-        defaultEdition: 'Draft v1',
-        lastUpdated: '2d ago',
-        blocksCount: 42,
-        branchesCount: 1,
-        openIssuesCount: 0,
-      },
-    ],
-  },
-  {
-    id: 'nb-research',
-    title: 'Personal Research & Ideas',
-    description: 'Draft ideas for decentralized knowledge graphs.',
-    visibility: 'PRIVATE',
-    role: 'OWNER',
-    notesCount: 1,
-    lastUpdated: '5d ago',
-    notes: [
-      {
-        id: 'note-graphs-kg',
-        notebookId: 'nb-research',
-        title: 'Knowledge Graph Synapses',
-        visibility: 'PRIVATE',
-        role: 'OWNER',
-        defaultEdition: 'v0.1',
-        lastUpdated: '5d ago',
-        blocksCount: 18,
-        branchesCount: 1,
-        openIssuesCount: 0,
-      },
-    ],
-  },
-];
 
-export const sampleContributedNotes: NoteItem[] = [
-  {
-    id: 'note-os-internals',
-    notebookId: 'nb-kernel-group',
-    title: 'Linux Kernel Memory Management & Paging',
-    description: 'Owned by @torvalds-club. Collaborative deep dive into Linux virtual memory.',
-    visibility: 'PUBLIC',
-    role: 'MAINTAINER',
-    defaultEdition: 'v5.18 Stable',
-    lastUpdated: '1h ago',
-    blocksCount: 154,
-    branchesCount: 5,
-    openIssuesCount: 3,
-    isStarred: true,
-  },
-  {
-    id: 'note-postgres-tuning',
-    notebookId: 'nb-db-perf',
-    title: 'PostgreSQL Query Planner & Indexing Tactics',
-    description: 'Owned by @db-guild. Production indexing patterns and VACUUM internals.',
-    visibility: 'PUBLIC',
-    role: 'CONTRIBUTOR',
-    defaultEdition: 'v1.4',
-    lastUpdated: '4h ago',
-    blocksCount: 76,
-    branchesCount: 2,
-    openIssuesCount: 1,
-  },
-  {
-    id: 'note-rust-async',
-    notebookId: 'nb-rustaceans',
-    title: 'Async Rust with Tokio: Concurrency Patterns',
-    description: 'Owned by @rust-study. Pin, Futures, and Waker deep dive.',
-    visibility: 'PUBLIC',
-    role: 'CONTRIBUTOR',
-    defaultEdition: 'v2.0 Draft',
-    lastUpdated: '1d ago',
-    blocksCount: 92,
-    branchesCount: 3,
-    openIssuesCount: 2,
-  },
-];
 
-export const sampleNotifications: NotificationItem[] = [
-  {
-    id: 'notif-1',
-    type: 'ACCESS_REQUEST',
-    title: 'Access Request from @bob',
-    description: 'Bob requested Contributor role on "CS 101 Study Notes"',
-    timestamp: '15m ago',
-    unread: true,
-  },
-  {
-    id: 'notif-2',
-    type: 'ISSUE_ASSIGNED',
-    title: 'Assigned to Issue #21',
-    description: 'Charlie assigned you to "Add TypeScript LexoRank midpoint code"',
-    timestamp: '2h ago',
-    unread: true,
-  },
-  {
-    id: 'notif-3',
-    type: 'BRANCH_MERGED',
-    title: 'Branch Merged into main',
-    description: 'Branch "issue-12-dijkstra-proof" was merged by @alice into main',
-    timestamp: '1d ago',
-    unread: false,
-  },
-  {
-    id: 'notif-4',
-    type: 'EDITION_PUBLISHED',
-    title: 'New Edition Published',
-    description: 'Edition "v3.0 Release" of React 19 Server Components is now live',
-    timestamp: '2d ago',
-    unread: false,
-  },
-];
-
-// ==========================================
-// 2. TOP NAV COMPONENT
-// ==========================================
-
-export function TopNav({
-  onOpenCreate,
-}: {
-  onOpenCreate: (type: "notebook" | "note" | "issue" | "branch" | "fork") => void;
-}) {
-  const [searchQuery, setSearchQuery] = useState("");
-  const [showNotifications, setShowNotifications] = useState(false);
-  const [showPlusMenu, setShowPlusMenu] = useState(false);
-  const [notifications, setNotifications] = useState<NotificationItem[]>(sampleNotifications);
-
-  const unreadCount = notifications.filter((n) => n.unread).length;
-
-  const markAllRead = () => {
-    setNotifications((prev) => prev.map((n) => ({ ...n, unread: false })));
-  };
-
-  return (
-    <header className="sticky top-0 z-40 w-full bg-zinc-950/90 border-b border-zinc-800 backdrop-blur-md px-4 lg:px-6 py-2.5">
-      <div className="flex items-center justify-between gap-4">
-        {/* Left Side: Brand Logo & Navigation Links */}
-        <div className="flex items-center gap-5">
-          <Link
-            href="/dashboard"
-            className="flex items-center gap-2.5 text-zinc-100 font-bold text-lg hover:opacity-90 transition-opacity tracking-tight"
-          >
-            <div className="w-8 h-8 rounded-lg bg-emerald-500/10 border border-emerald-500/20 text-emerald-400 flex items-center justify-center">
-              <BookOpen className="w-4 h-4" />
-            </div>
-            <span>BookWorm</span>
-          </Link>
-
-          {/* GitHub-style Action Links */}
-          <nav className="hidden md:flex items-center gap-1 text-sm font-medium text-zinc-300">
-            <button
-              onClick={() => onOpenCreate("issue")}
-              className="flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg hover:bg-zinc-900 hover:text-zinc-100 transition-colors text-xs font-semibold cursor-pointer"
-            >
-              <CircleDot className="w-3.5 h-3.5 text-emerald-400" />
-              <span>Issues</span>
-              <span className="ml-1 px-1.5 py-0.2 rounded-full bg-emerald-500/10 text-emerald-400 text-[11px] font-mono border border-emerald-500/20">
-                3
-              </span>
-            </button>
-
-            <button
-              onClick={() => onOpenCreate("branch")}
-              className="flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg hover:bg-zinc-900 hover:text-zinc-100 transition-colors text-xs font-semibold cursor-pointer"
-            >
-              <GitPullRequest className="w-3.5 h-3.5 text-blue-400" />
-              <span>Pull Requests & Merges</span>
-              <span className="ml-1 px-1.5 py-0.2 rounded-full bg-blue-500/10 text-blue-400 text-[11px] font-mono border border-blue-500/20">
-                2
-              </span>
-            </button>
-
-            <button
-              onClick={() => onOpenCreate("notebook")}
-              className="flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg hover:bg-zinc-900 hover:text-zinc-100 transition-colors text-xs font-semibold cursor-pointer"
-            >
-              <BookMarked className="w-3.5 h-3.5 text-purple-400" />
-              <span>Notebooks & Editions</span>
-            </button>
-          </nav>
-        </div>
-
-        {/* Center: Search Bar */}
-        <div className="flex-1 max-w-md hidden sm:block">
-          <div className="relative">
-            <div className="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none text-zinc-500">
-              <Search className="w-3.5 h-3.5" />
-            </div>
-            <input
-              type="text"
-              value={searchQuery}
-              onChange={(e) => setSearchQuery(e.target.value)}
-              placeholder="Search or jump to notes, notebooks, issues, blocks..."
-              className="w-full pl-9 pr-14 py-1.5 text-xs rounded-lg bg-zinc-900/80 border border-zinc-800 text-zinc-100 placeholder-zinc-500 focus:outline-none focus:ring-1 focus:ring-emerald-500/50 focus:border-emerald-500/50 transition-all font-sans"
-            />
-            <div className="absolute inset-y-0 right-0 pr-2 flex items-center pointer-events-none">
-              <kbd className="text-[10px] uppercase font-mono px-1.5 py-0.5 rounded bg-zinc-800 border border-zinc-700 text-zinc-400">
-                Ctrl K
-              </kbd>
-            </div>
-          </div>
-        </div>
-
-        {/* Right Side: Quick Create & Notifications */}
-        <div className="flex items-center gap-2 relative">
-          {/* Quick Create (+) Dropdown */}
-          <div className="relative">
-            <button
-              onClick={() => setShowPlusMenu(!showPlusMenu)}
-              className="flex items-center gap-1 px-2.5 py-1.5 rounded-lg bg-zinc-900 hover:bg-zinc-800 text-zinc-200 border border-zinc-800 hover:border-zinc-700 text-xs font-medium transition-colors cursor-pointer"
-              title="Create new item"
-            >
-              <Plus className="w-3.5 h-3.5 text-emerald-400" />
-              <ChevronDown className="w-3 h-3 text-zinc-400" />
-            </button>
-
-            {showPlusMenu && (
-              <>
-                <div
-                  className="fixed inset-0 z-40"
-                  onClick={() => setShowPlusMenu(false)}
-                />
-                <div className="absolute right-0 mt-2 w-56 rounded-xl bg-zinc-900 border border-zinc-800 shadow-2xl py-1.5 z-50 text-xs text-zinc-200">
-                  <div className="px-3 py-1.5 text-[11px] font-semibold uppercase tracking-wider text-zinc-500 border-b border-zinc-800/80">
-                    Quick Actions
-                  </div>
-
-                  <button
-                    onClick={() => {
-                      setShowPlusMenu(false);
-                      onOpenCreate("note");
-                    }}
-                    className="w-full text-left px-3 py-2 flex items-center gap-2.5 hover:bg-zinc-800 hover:text-zinc-100 cursor-pointer"
-                  >
-                    <FileText className="w-3.5 h-3.5 text-emerald-400" />
-                    <div>
-                      <div className="font-medium">New Note</div>
-                      <div className="text-[10px] text-zinc-500">Create modular 3-layer note</div>
-                    </div>
-                  </button>
-
-                  <button
-                    onClick={() => {
-                      setShowPlusMenu(false);
-                      onOpenCreate("notebook");
-                    }}
-                    className="w-full text-left px-3 py-2 flex items-center gap-2.5 hover:bg-zinc-800 hover:text-zinc-100 cursor-pointer"
-                  >
-                    <FolderPlus className="w-3.5 h-3.5 text-purple-400" />
-                    <div>
-                      <div className="font-medium">New Notebook</div>
-                      <div className="text-[10px] text-zinc-500">Organize collections & permissions</div>
-                    </div>
-                  </button>
-
-                  <button
-                    onClick={() => {
-                      setShowPlusMenu(false);
-                      onOpenCreate("issue");
-                    }}
-                    className="w-full text-left px-3 py-2 flex items-center gap-2.5 hover:bg-zinc-800 hover:text-zinc-100 cursor-pointer"
-                  >
-                    <CircleDot className="w-3.5 h-3.5 text-amber-400" />
-                    <div>
-                      <div className="font-medium">New Issue</div>
-                      <div className="text-[10px] text-zinc-500">Lock block & assign contributor</div>
-                    </div>
-                  </button>
-
-                  <button
-                    onClick={() => {
-                      setShowPlusMenu(false);
-                      onOpenCreate("branch");
-                    }}
-                    className="w-full text-left px-3 py-2 flex items-center gap-2.5 hover:bg-zinc-800 hover:text-zinc-100 cursor-pointer"
-                  >
-                    <GitBranch className="w-3.5 h-3.5 text-blue-400" />
-                    <div>
-                      <div className="font-medium">New Branch</div>
-                      <div className="text-[10px] text-zinc-500">Parallel editing workspace</div>
-                    </div>
-                  </button>
-
-                  <div className="border-t border-zinc-800/80 my-1" />
-
-                  <button
-                    onClick={() => {
-                      setShowPlusMenu(false);
-                      onOpenCreate("fork");
-                    }}
-                    className="w-full text-left px-3 py-2 flex items-center gap-2.5 hover:bg-zinc-800 hover:text-zinc-100 cursor-pointer"
-                  >
-                    <GitFork className="w-3.5 h-3.5 text-cyan-400" />
-                    <div>
-                      <div className="font-medium">Fork a Note</div>
-                      <div className="text-[10px] text-zinc-500">Zero-cost content clone (CAS)</div>
-                    </div>
-                  </button>
-                </div>
-              </>
-            )}
-          </div>
-
-          {/* Notifications Dropdown */}
-          <div className="relative">
-            <button
-              onClick={() => setShowNotifications(!showNotifications)}
-              className="relative p-2 rounded-lg bg-zinc-900 hover:bg-zinc-800 text-zinc-300 border border-zinc-800 hover:border-zinc-700 transition-colors cursor-pointer"
-              title="Notifications"
-            >
-              <Bell className="w-3.5 h-3.5" />
-              {unreadCount > 0 && (
-                <span className="absolute top-1.5 right-1.5 w-2 h-2 rounded-full bg-emerald-500 ring-2 ring-zinc-950" />
-              )}
-            </button>
-
-            {showNotifications && (
-              <>
-                <div
-                  className="fixed inset-0 z-40"
-                  onClick={() => setShowNotifications(false)}
-                />
-                <div className="absolute right-0 mt-2 w-80 rounded-xl bg-zinc-900 border border-zinc-800 shadow-2xl z-50 overflow-hidden">
-                  <div className="flex items-center justify-between px-3.5 py-2.5 bg-zinc-950/60 border-b border-zinc-800">
-                    <span className="text-xs font-semibold text-zinc-200">Notifications</span>
-                    {unreadCount > 0 && (
-                      <button
-                        onClick={markAllRead}
-                        className="text-[11px] text-emerald-400 hover:text-emerald-300 flex items-center gap-1 cursor-pointer"
-                      >
-                        <Check className="w-3 h-3" />
-                        Mark all as read
-                      </button>
-                    )}
-                  </div>
-
-                  <div className="max-h-72 overflow-y-auto divide-y divide-zinc-800/60">
-                    {notifications.map((n) => (
-                      <div
-                        key={n.id}
-                        className={`p-3 text-xs hover:bg-zinc-800/50 transition-colors ${
-                          n.unread ? "bg-emerald-950/10" : ""
-                        }`}
-                      >
-                        <div className="flex items-start justify-between gap-2">
-                          <span className="font-semibold text-zinc-200">{n.title}</span>
-                          <span className="text-[10px] text-zinc-500 shrink-0">{n.timestamp}</span>
-                        </div>
-                        <p className="text-zinc-400 text-[11px] mt-0.5 leading-relaxed">{n.description}</p>
-                      </div>
-                    ))}
-                  </div>
-
-                  <div className="p-2 text-center bg-zinc-950/60 border-t border-zinc-800">
-                    <span className="text-[11px] text-zinc-500">All notifications updated</span>
-                  </div>
-                </div>
-              </>
-            )}
-          </div>
-        </div>
-      </div>
-    </header>
-  );
-}
 
 // ==========================================
 // 3. LEFT SIDEBAR COMPONENT
 // ==========================================
 
 export function LeftSidebar({
+  user,
   notebooks,
+  dashboardNotes = [],
+  userRoles = [],
   onOpenProfile,
   onOpenCreate,
   onSelectNote,
 }: {
+  user: UserWithStats;
   notebooks: Notebook[];
+  dashboardNotes?: DashboardNoteItem[];
+  userRoles?: Array<{ notebook_id: string; role_type: string }>;
   onOpenProfile: () => void;
   onOpenCreate: (type: "notebook" | "note" | "issue" | "branch" | "fork") => void;
   onSelectNote?: (note: NoteItem) => void;
 }) {
   const [filterQuery, setFilterQuery] = useState("");
   const [activeTab, setActiveTab] = useState<"all" | "owned" | "contributed" | "starred">("all");
-  const [expandedNotebooks, setExpandedNotebooks] = useState<Record<string, boolean>>({});
+  const [expandedNotebooks, setExpandedNotebooks] = useState<Record<string, boolean>>({
+    [notebooks[0]?.notebook_id]: true, // Expand first notebook by default
+  });
 
   const toggleNotebook = (id: string) => {
     setExpandedNotebooks((prev) => ({
@@ -622,39 +151,42 @@ export function LeftSidebar({
     }));
   };
 
-  // Transform real notebooks to match UI expectations
-  const notebooksWithNotes = notebooks.map(nb => ({
-    id: nb.notebook_id,
-    title: nb.title,
-    description: nb.description || '',
-    visibility: nb.visibility,
-    notesCount: nb.notes_count || 0,
-    role: 'OWNER' as const, // TODO: Use actual role from database
-    isStarred: false, // TODO: Implement starring
-    notes: [] as Array<{
-      id: string;
-      title: string;
-      openIssuesCount: number;
-      defaultEdition: string;
-    }>, // TODO: Fetch notes when expanded
-  }));
+  // Transform real notebooks with their real notes and user roles
+  const notebooksWithNotes = notebooks.map(nb => {
+    const role = userRoles.find(r => r.notebook_id === nb.notebook_id)?.role_type || 'OWNER';
+    const nbNotes = dashboardNotes.filter(n => n.notebook_id === nb.notebook_id);
+    return {
+      id: nb.notebook_id,
+      title: nb.title,
+      description: nb.description || '',
+      visibility: nb.visibility,
+      notesCount: nbNotes.length || nb.notes_count || 0,
+      role: role as 'OWNER' | 'MAINTAINER' | 'CONTRIBUTOR',
+      isStarred: false,
+      notes: nbNotes.map(n => ({
+        id: n.note_id,
+        notebookId: n.notebook_id,
+        title: n.title,
+        openIssuesCount: n.open_issues_count,
+        defaultEdition: 'main',
+        blocksCount: n.blocks_count,
+        branchesCount: n.active_branches_count,
+      })),
+    };
+  });
+
+  const ownedNotebooks = notebooksWithNotes.filter(nb => nb.role === 'OWNER');
+  const contributedNotebooks = notebooksWithNotes.filter(nb => nb.role !== 'OWNER');
 
   const filteredNotebooks = notebooksWithNotes.filter((nb) => {
-    if (activeTab === "contributed") return false;
+    if (activeTab === "owned" && nb.role !== "OWNER") return false;
+    if (activeTab === "contributed" && nb.role === "OWNER") return false;
     if (activeTab === "starred" && !nb.isStarred) return false;
     if (!filterQuery) return true;
     const matchNb = nb.title.toLowerCase().includes(filterQuery.toLowerCase());
-    return matchNb;
+    const matchNote = nb.notes.some(n => n.title.toLowerCase().includes(filterQuery.toLowerCase()));
+    return matchNb || matchNote;
   });
-
-  // TODO: Fetch contributed notes from database
-  const filteredContributed: Array<{
-    id: string;
-    title: string;
-    openIssuesCount: number;
-    defaultEdition: string;
-    [key: string]: any;
-  }> = [];
 
   return (
     <aside className="w-full lg:w-80 bg-zinc-950 border-r border-zinc-800/80 flex flex-col h-[calc(100vh-53px)] sticky top-[53px] overflow-hidden select-none">
@@ -667,23 +199,29 @@ export function LeftSidebar({
         >
           <div className="flex items-center gap-3">
             <div className="relative">
-              <img
-                src={currentUser.avatarUrl}
-                alt={currentUser.name}
-                className="w-10 h-10 rounded-full object-cover ring-2 ring-emerald-500/40 group-hover:ring-emerald-400 transition-all"
-              />
+              <div className="w-10 h-10 rounded-full bg-emerald-500/10 border border-emerald-500/30 flex items-center justify-center text-emerald-400 font-bold text-sm overflow-hidden ring-2 ring-emerald-500/40 group-hover:ring-emerald-400 transition-all">
+                {user.avatar_url ? (
+                  <img
+                    src={user.avatar_url}
+                    alt={user.username}
+                    className="w-full h-full object-cover"
+                  />
+                ) : (
+                  user.username[0]?.toUpperCase()
+                )}
+              </div>
               <span className="absolute -bottom-0.5 -right-0.5 w-3 h-3 bg-emerald-500 rounded-full ring-2 ring-zinc-950" />
             </div>
             <div>
               <div className="flex items-center gap-1.5">
                 <span className="text-xs font-bold text-zinc-100 group-hover:text-emerald-300 transition-colors">
-                  {currentUser.name}
+                  {user.username}
                 </span>
                 <span className="text-[9px] font-mono font-bold uppercase px-1.5 py-0.2 rounded bg-emerald-500/10 text-emerald-400 border border-emerald-500/20">
-                  {currentUser.role}
+                  {user.system_role || 'USER'}
                 </span>
               </div>
-              <p className="text-[11px] text-zinc-400 font-mono">@{currentUser.username}</p>
+              <p className="text-[11px] text-zinc-400 font-mono">@{user.username}</p>
             </div>
           </div>
 
@@ -721,19 +259,19 @@ export function LeftSidebar({
           </div>
         </div>
 
-        {/* Search Input for Repos/Notebooks */}
+        {/* Filter Input */}
         <div className="relative">
-          <Search className="w-3 h-3 absolute left-2.5 top-1/2 -translate-y-1/2 text-zinc-500" />
+          <Search className="w-3.5 h-3.5 absolute left-2.5 top-2.5 text-zinc-500" />
           <input
             type="text"
+            placeholder="Filter notes & notebooks..."
             value={filterQuery}
             onChange={(e) => setFilterQuery(e.target.value)}
-            placeholder="Filter notes & notebooks..."
-            className="w-full pl-7 pr-3 py-1.5 text-[11px] rounded-lg bg-zinc-900/70 border border-zinc-800 text-zinc-200 placeholder-zinc-500 focus:outline-none focus:border-emerald-500/40"
+            className="w-full pl-8 pr-3 py-1.5 rounded-lg bg-zinc-900 border border-zinc-800 text-zinc-200 placeholder:text-zinc-500 text-xs focus:outline-none focus:border-emerald-500/50 transition-colors"
           />
         </div>
 
-        {/* Filter Tabs (Like GitHub: All / Owned / Contributed / Starred) */}
+        {/* Categories Tabs */}
         <div className="flex items-center gap-1 text-[11px] font-medium border-b border-zinc-800/40 pb-1">
           <button
             onClick={() => setActiveTab("all")}
@@ -743,7 +281,7 @@ export function LeftSidebar({
                 : "text-zinc-400 hover:text-zinc-200"
             }`}
           >
-            All
+            All ({notebooksWithNotes.length})
           </button>
           <button
             onClick={() => setActiveTab("owned")}
@@ -753,7 +291,7 @@ export function LeftSidebar({
                 : "text-zinc-400 hover:text-zinc-200"
             }`}
           >
-            Owned ({sampleNotebooks.length})
+            Owned ({ownedNotebooks.length})
           </button>
           <button
             onClick={() => setActiveTab("contributed")}
@@ -763,136 +301,90 @@ export function LeftSidebar({
                 : "text-zinc-400 hover:text-zinc-200"
             }`}
           >
-            Contributed ({sampleContributedNotes.length})
-          </button>
-          <button
-            onClick={() => setActiveTab("starred")}
-            className={`px-2 py-1 rounded-md transition-colors cursor-pointer flex items-center gap-1 ${
-              activeTab === "starred"
-                ? "bg-zinc-800 text-amber-400 font-semibold"
-                : "text-zinc-400 hover:text-zinc-200"
-            }`}
-          >
-            <Star className="w-2.5 h-2.5 text-amber-400" />
-            Starred
+            Contributed ({contributedNotebooks.length})
           </button>
         </div>
       </div>
 
       {/* 3. SCROLLABLE DIRECTORY: Possessions & Contributions */}
-      <div className="flex-1 overflow-y-auto p-3 space-y-4 text-xs">
-        {/* SECTION A: OWNED NOTEBOOKS & NOTES */}
-        {filteredNotebooks.length > 0 && (
-          <div className="space-y-1.5">
-            <div className="px-1 text-[10px] font-bold uppercase tracking-wider text-zinc-500 flex items-center justify-between">
-              <span>Your Notebooks (Possessions)</span>
-              <span>{filteredNotebooks.length}</span>
-            </div>
-
-            <div className="space-y-1">
-              {filteredNotebooks.map((nb) => {
-                const isExpanded = !!expandedNotebooks[nb.id];
-                return (
-                  <div
-                    key={nb.id}
-                    className="rounded-xl border border-zinc-800/80 bg-zinc-900/40 overflow-hidden"
-                  >
-                    {/* Notebook Header - Click to View */}
-                    <Link
-                      href={`/dashboard/notebooks/${nb.id}/manage`}
-                      className="w-full px-2.5 py-2 flex items-center justify-between hover:bg-zinc-800/50 transition-colors cursor-pointer text-left group"
-                    >
-                      <div className="flex items-center gap-2 min-w-0">
-                        <Folder className="w-3.5 h-3.5 text-purple-400 shrink-0" />
-                        <span className="font-semibold text-zinc-200 truncate text-[11px] group-hover:text-purple-300">
-                          {nb.title}
-                        </span>
-                      </div>
-
-                      <div className="flex items-center gap-1.5 shrink-0 text-zinc-500">
-                        {nb.visibility === "PRIVATE" ? (
-                          <Lock className="w-2.5 h-2.5 text-zinc-400" />
-                        ) : (
-                          <Globe className="w-2.5 h-2.5 text-zinc-500" />
-                        )}
-                        <span className="text-[10px] font-mono bg-zinc-800/80 px-1.5 py-0.2 rounded text-zinc-400">
-                          {nb.notesCount}
-                        </span>
-                        <ChevronRight className="w-3 h-3 text-zinc-500 group-hover:translate-x-0.5 transition-transform" />
-                      </div>
-                    </Link>
-                  </div>
-                );
-              })}
-            </div>
-          </div>
-        )}
-
-        {/* SECTION B: CONTRIBUTED NOTES (Like GitHub Repos Contributed To) */}
-        {filteredContributed.length > 0 && (
-          <div className="space-y-1.5 pt-1">
-            <div className="px-1 text-[10px] font-bold uppercase tracking-wider text-zinc-500 flex items-center justify-between">
-              <span className="flex items-center gap-1">
-                <Layers className="w-3 h-3 text-blue-400" />
-                Contributed Notes
-              </span>
-              <span>{filteredContributed.length}</span>
-            </div>
-
-            <div className="space-y-1">
-              {filteredContributed.map((note) => (
+      <div className="flex-1 overflow-y-auto p-3 space-y-3 text-xs">
+        {filteredNotebooks.length > 0 ? (
+          <div className="space-y-2">
+            {filteredNotebooks.map((nb) => {
+              const isExpanded = !!expandedNotebooks[nb.id];
+              return (
                 <div
-                  key={note.id}
-                  onClick={() => {/* TODO: Implement note navigation */}}
-                  className="p-2.5 rounded-xl border border-zinc-800/80 bg-zinc-900/40 hover:bg-zinc-800/50 transition-colors cursor-pointer group"
+                  key={nb.id}
+                  className="rounded-xl border border-zinc-800/80 bg-zinc-900/40 overflow-hidden"
                 >
-                  <div className="flex items-start justify-between gap-2">
-                    <div className="flex items-center gap-2 min-w-0">
-                      <FileText className="w-3.5 h-3.5 text-blue-400 shrink-0" />
-                      <span className="font-semibold text-zinc-200 group-hover:text-blue-300 text-[11px] truncate">
-                        {note.title}
-                      </span>
-                    </div>
-                    <span
-                      className={`text-[9px] font-mono font-bold px-1.5 py-0.2 rounded border shrink-0 ${
-                        note.role === "MAINTAINER"
-                          ? "bg-purple-500/10 text-purple-400 border-purple-500/20"
-                          : "bg-blue-500/10 text-blue-400 border-blue-500/20"
-                      }`}
+                  {/* Notebook Header */}
+                  <div className="w-full px-2.5 py-2 flex items-center justify-between hover:bg-zinc-800/50 transition-colors text-left group">
+                    <button
+                      type="button"
+                      onClick={() => toggleNotebook(nb.id)}
+                      className="flex items-center gap-2 min-w-0 flex-1 cursor-pointer text-left"
                     >
-                      {note.role}
-                    </span>
-                  </div>
-
-                  {note.description && (
-                    <p className="text-[10px] text-zinc-400 mt-1 line-clamp-1">
-                      {note.description}
-                    </p>
-                  )}
-
-                  <div className="flex items-center gap-3 mt-2 text-[10px] text-zinc-500">
-                    <span className="flex items-center gap-1 font-mono">
-                      <GitBranch className="w-2.5 h-2.5 text-zinc-400" />
-                      {note.branchesCount} branches
-                    </span>
-                    {note.openIssuesCount > 0 && (
-                      <span className="flex items-center gap-1 font-mono text-amber-400">
-                        <CircleDot className="w-2.5 h-2.5" />
-                        {note.openIssuesCount} issues
+                      <ChevronRight className={`w-3.5 h-3.5 text-zinc-500 transition-transform ${isExpanded ? 'rotate-90 text-zinc-300' : ''}`} />
+                      <Folder className="w-3.5 h-3.5 text-purple-400 shrink-0" />
+                      <span className="font-semibold text-zinc-200 truncate text-[11px] group-hover:text-purple-300">
+                        {nb.title}
                       </span>
-                    )}
-                    <span className="ml-auto text-zinc-500 text-[9px]">{note.lastUpdated}</span>
-                  </div>
-                </div>
-              ))}
-            </div>
-          </div>
-        )}
+                    </button>
 
-        {/* Empty Search Fallback */}
-        {filteredNotebooks.length === 0 && filteredContributed.length === 0 && (
-          <div className="p-6 text-center text-zinc-500 text-xs">
-            <p>No notes or notebooks found matching "{filterQuery}"</p>
+                    <div className="flex items-center gap-1.5 shrink-0 text-zinc-500">
+                      <span className="text-[9px] font-mono px-1.5 py-0.2 rounded bg-zinc-800 text-zinc-400">
+                        {nb.role}
+                      </span>
+                      <Link
+                        href={`/dashboard/notebooks/${nb.id}/manage`}
+                        className="p-1 hover:text-zinc-200 hover:bg-zinc-800 rounded transition-colors"
+                        title="Manage notebook & collaborators"
+                      >
+                        <Settings className="w-3 h-3 text-zinc-500 hover:text-zinc-300" />
+                      </Link>
+                    </div>
+                  </div>
+
+                  {/* Collapsible Notes inside Notebook */}
+                  {isExpanded && (
+                    <div className="border-t border-zinc-800/60 bg-zinc-950/60 p-1.5 space-y-1">
+                      {nb.notes.length === 0 ? (
+                        <div className="px-3 py-2 text-[10px] text-zinc-500 italic">
+                          No notes in this notebook yet
+                        </div>
+                      ) : (
+                        nb.notes.map((note) => (
+                          <Link
+                            key={note.id}
+                            href={`/dashboard/notebooks/${nb.id}/notes/${note.id}`}
+                            className="px-2.5 py-1.5 rounded-lg hover:bg-zinc-850 text-zinc-300 hover:text-zinc-100 flex items-center justify-between gap-2 text-[11px] transition-colors group/note"
+                          >
+                            <div className="flex items-center gap-1.5 truncate">
+                              <FileText className="w-3 h-3 text-emerald-400 shrink-0" />
+                              <span className="truncate">{note.title}</span>
+                            </div>
+                            <div className="flex items-center gap-1 shrink-0 font-mono text-[9px]">
+                              {note.openIssuesCount > 0 && (
+                                <span className="px-1.5 py-0.2 rounded bg-amber-500/10 text-amber-400 border border-amber-500/20">
+                                  {note.openIssuesCount} issue{note.openIssuesCount > 1 ? 's' : ''}
+                                </span>
+                              )}
+                              <span className="text-zinc-500">
+                                {note.blocksCount} blk
+                              </span>
+                            </div>
+                          </Link>
+                        ))
+                      )}
+                    </div>
+                  )}
+                </div>
+              );
+            })}
+          </div>
+        ) : (
+          <div className="p-4 text-center text-zinc-500 text-xs">
+            No notebooks found matching "{filterQuery}"
           </div>
         )}
       </div>
@@ -905,8 +397,22 @@ export function LeftSidebar({
 // ==========================================
 
 export function HomeFeed({
+  user,
+  notebooks,
+  unmergedBranches = [],
+  dashboardNotes = [],
+  userRoles = [],
+  analytics,
+  activities = [],
   onOpenCreate,
 }: {
+  user: UserWithStats;
+  notebooks: Notebook[];
+  unmergedBranches?: UnmergedBranchItem[];
+  dashboardNotes?: DashboardNoteItem[];
+  userRoles?: Array<{ notebook_id: string; role_type: string }>;
+  analytics?: StorageAnalytics;
+  activities?: ActivityItem[];
   onOpenCreate: (type: "notebook" | "note" | "issue" | "branch" | "fork") => void;
 }) {
   return (
@@ -917,18 +423,18 @@ export function HomeFeed({
         <div className="relative z-10 max-w-2xl space-y-3">
           <div className="inline-flex items-center gap-2 px-2.5 py-1 rounded-full bg-emerald-500/10 border border-emerald-500/20 text-emerald-400 text-xs font-semibold">
             <Sparkles className="w-3.5 h-3.5" />
-            <span>GitHub for Notes • Localhost Preview</span>
+            <span>GitHub for Notes • Version Control Hub</span>
           </div>
 
           <h1 className="text-2xl lg:text-3xl font-extrabold text-zinc-100 tracking-tight">
-            Welcome back, {currentUser.name}
+            Welcome back, {user.username}
           </h1>
 
           <p className="text-sm text-zinc-400 leading-relaxed">
-            Manage your modular notes with Git-like branches, LexoRank block ordering, granular permissions, and content-addressed deduplication.
+            Collaborate on modular notes with zero-conflict block locking, attempt branches, LexoRank ordering, and content-addressed storage (CAS).
           </p>
 
-          {/* Quick Action Buttons Directing to Functionalities */}
+          {/* Quick Action Buttons */}
           <div className="flex flex-wrap items-center gap-2.5 pt-3">
             <button
               onClick={() => onOpenCreate("note")}
@@ -955,14 +461,6 @@ export function HomeFeed({
             </button>
 
             <button
-              onClick={() => onOpenCreate("branch")}
-              className="px-4 py-2 rounded-xl bg-zinc-800 hover:bg-zinc-700 text-zinc-200 text-xs font-semibold border border-zinc-700/60 transition-all flex items-center gap-1.5 cursor-pointer"
-            >
-              <GitBranch className="w-4 h-4 text-blue-400" />
-              New Branch
-            </button>
-
-            <button
               onClick={() => onOpenCreate("fork")}
               className="px-4 py-2 rounded-xl bg-zinc-800 hover:bg-zinc-700 text-zinc-200 text-xs font-semibold border border-zinc-700/60 transition-all flex items-center gap-1.5 cursor-pointer"
             >
@@ -973,108 +471,230 @@ export function HomeFeed({
         </div>
       </div>
 
-      {/* 2. Core Architecture Stat Badges */}
+      {/* 2. Core Architecture Real Stat Badges */}
       <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
-        <div className="p-4 rounded-xl bg-zinc-900/60 border border-zinc-800 space-y-1">
+        <div className="p-4 rounded-2xl bg-zinc-900/70 border border-zinc-800/80 shadow-sm space-y-1.5 hover:border-emerald-500/30 transition-all">
           <div className="flex items-center justify-between text-zinc-400 text-xs">
-            <span className="font-medium">Owned & Contributed</span>
-            <BookOpen className="w-4 h-4 text-emerald-400" />
+            <span className="font-medium text-[11px] uppercase tracking-wider">Total Notes</span>
+            <div className="p-1.5 rounded-lg bg-emerald-500/10 text-emerald-400 border border-emerald-500/20">
+              <BookOpen className="w-3.5 h-3.5" />
+            </div>
           </div>
-          <div className="text-2xl font-bold text-zinc-100 font-mono">17 Notes</div>
-          <p className="text-[11px] text-zinc-500">Across 4 notebooks</p>
+          <div className="text-2xl font-bold text-zinc-100 font-mono tracking-tight">
+            {user.stats.notes_count} {user.stats.notes_count === 1 ? 'Note' : 'Notes'}
+          </div>
+          <p className="text-[11px] text-zinc-500">Across {notebooks.length} collections</p>
         </div>
 
-        <div className="p-4 rounded-xl bg-zinc-900/60 border border-zinc-800 space-y-1">
+        <div className="p-4 rounded-2xl bg-zinc-900/70 border border-zinc-800/80 shadow-sm space-y-1.5 hover:border-amber-500/30 transition-all">
           <div className="flex items-center justify-between text-zinc-400 text-xs">
-            <span className="font-medium">Active Block Issues</span>
-            <CircleDot className="w-4 h-4 text-amber-400" />
+            <span className="font-medium text-[11px] uppercase tracking-wider">Active Block Issues</span>
+            <div className="p-1.5 rounded-lg bg-amber-500/10 text-amber-400 border border-amber-500/20">
+              <CircleDot className="w-3.5 h-3.5" />
+            </div>
           </div>
-          <div className="text-2xl font-bold text-zinc-100 font-mono">3 Open</div>
-          <p className="text-[11px] text-zinc-500">Slot locks in effect</p>
+          <div className="text-2xl font-bold text-zinc-100 font-mono tracking-tight">
+            {user.stats.issues_count} Open
+          </div>
+          <p className="text-[11px] text-zinc-500">Zero-conflict slot locks</p>
         </div>
 
-        <div className="p-4 rounded-xl bg-zinc-900/60 border border-zinc-800 space-y-1">
+        <div className="p-4 rounded-2xl bg-zinc-900/70 border border-zinc-800/80 shadow-sm space-y-1.5 hover:border-blue-500/30 transition-all">
           <div className="flex items-center justify-between text-zinc-400 text-xs">
-            <span className="font-medium">Branch Merges</span>
-            <GitPullRequest className="w-4 h-4 text-blue-400" />
+            <span className="font-medium text-[11px] uppercase tracking-wider">Commit Chain</span>
+            <div className="p-1.5 rounded-lg bg-blue-500/10 text-blue-400 border border-blue-500/20">
+              <GitCommit className="w-3.5 h-3.5" />
+            </div>
           </div>
-          <div className="text-2xl font-bold text-zinc-100 font-mono">14 Merged</div>
-          <p className="text-[11px] text-zinc-500">Ternary manifests updated</p>
+          <div className="text-2xl font-bold text-zinc-100 font-mono tracking-tight">
+            {user.stats.commits_count} Commits
+          </div>
+          <p className="text-[11px] text-zinc-500">Ternary manifests linked</p>
         </div>
 
-        <div className="p-4 rounded-xl bg-zinc-900/60 border border-zinc-800 space-y-1">
+        <div className="p-4 rounded-2xl bg-zinc-900/70 border border-zinc-800/80 shadow-sm space-y-1.5 hover:border-purple-500/30 transition-all">
           <div className="flex items-center justify-between text-zinc-400 text-xs">
-            <span className="font-medium">CAS Deduplication</span>
-            <Database className="w-4 h-4 text-purple-400" />
+            <span className="font-medium text-[11px] uppercase tracking-wider">Storage Engine</span>
+            <div className="p-1.5 rounded-lg bg-purple-500/10 text-purple-400 border border-purple-500/20">
+              <Database className="w-3.5 h-3.5" />
+            </div>
           </div>
-          <div className="text-2xl font-bold text-emerald-400 font-mono">82.5%</div>
-          <p className="text-[11px] text-zinc-500">Shared content blobs</p>
+          <div className="text-2xl font-bold text-emerald-400 font-mono tracking-tight">CAS SHA-256</div>
+          <p className="text-[11px] text-zinc-500">Zero-cost content addressed</p>
         </div>
       </div>
 
-      {/* 3. Middle / Right Feed Placeholder */}
+      {/* 3. Interactive Version Control Cheatsheet & Workflow Guide */}
+      <VersionControlGuide />
+
+      {/* 4. Action Required: Branches Awaiting Review & Merge (Only shown for maintainers with active review requests) */}
+      {unmergedBranches && unmergedBranches.length > 0 && (
+        <UnmergedBranchesWidget branches={unmergedBranches} />
+      )}
+
+      {/* 4.5. Storage Analytics & Unified Activity Feed */}
+      {analytics && (
+        <StorageAndActivityWidget
+          analytics={analytics}
+          activities={activities || []}
+        />
+      )}
+
+      {/* 5. Workspaces & Modular Notes Explorer */}
       <div className="space-y-4">
         <div className="flex items-center justify-between">
           <div className="flex items-center gap-2">
-            <Clock className="w-4 h-4 text-zinc-400" />
-            <h2 className="text-sm font-bold text-zinc-200">Activity & Home Feed</h2>
+            <Folder className="w-4 h-4 text-purple-400" />
+            <h2 className="text-sm font-bold text-zinc-200">Your Notebooks & Notes</h2>
           </div>
-          <span className="text-xs text-zinc-500 font-mono">Localhost Simulation</span>
+          <span className="text-xs text-zinc-500 font-mono">{notebooks.length} Workspaces</span>
         </div>
 
-        {/* Minimalist Feed Placeholder State */}
-        <div className="rounded-2xl border border-zinc-800/80 bg-zinc-900/30 p-8 text-center space-y-4">
-          <div className="w-12 h-12 rounded-2xl bg-zinc-900 border border-zinc-800 text-zinc-400 flex items-center justify-center mx-auto shadow-inner">
-            <Layers className="w-6 h-6 text-emerald-400" />
-          </div>
+        <div className="grid grid-cols-1 gap-6">
+          {notebooks.map((nb) => {
+            const role = userRoles.find((r) => r.notebook_id === nb.notebook_id)?.role_type || 'OWNER';
+            const notes = dashboardNotes.filter((n) => n.notebook_id === nb.notebook_id);
 
-          <div className="max-w-md mx-auto space-y-1.5">
-            <h3 className="text-base font-semibold text-zinc-200">
-              Home feed placeholder
-            </h3>
-            <p className="text-xs text-zinc-400 leading-relaxed">
-              Global collaborative updates, note timeline commits, access invitations, and community forks will be rendered in this area as we continue building.
-            </p>
-          </div>
+            return (
+              <div
+                key={nb.notebook_id}
+                className="rounded-2xl border border-zinc-800 bg-zinc-900/40 p-6 space-y-5 hover:border-zinc-700/80 transition-all shadow-md"
+              >
+                {/* Notebook Card Header */}
+                <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 pb-4 border-b border-zinc-800/80">
+                  <div className="space-y-1">
+                    <div className="flex items-center gap-2.5 flex-wrap">
+                      <h3 className="text-base font-bold text-zinc-100">{nb.title}</h3>
+                      <span className="px-2 py-0.5 rounded text-[10px] font-mono font-bold uppercase bg-emerald-500/10 text-emerald-400 border border-emerald-500/20">
+                        {role}
+                      </span>
+                      <span className="px-2 py-0.5 rounded text-[10px] font-mono text-zinc-400 bg-zinc-800 border border-zinc-700">
+                        {nb.visibility}
+                      </span>
+                    </div>
+                    {nb.description && (
+                      <p className="text-xs text-zinc-400 max-w-2xl leading-relaxed">
+                        {nb.description}
+                      </p>
+                    )}
+                  </div>
 
-          {/* Demonstration list of recent collaborative events */}
-          <div className="max-w-lg mx-auto text-left pt-4 divide-y divide-zinc-800/60 border-t border-zinc-800/60">
-            <div className="py-3 flex items-start gap-3">
-              <div className="p-1.5 rounded-lg bg-emerald-500/10 text-emerald-400 shrink-0 mt-0.5">
-                <CheckCircle2 className="w-3.5 h-3.5" />
-              </div>
-              <div className="text-xs space-y-0.5">
-                <p className="text-zinc-200 font-medium">
-                  <span className="text-emerald-400">@alice</span> published edition <code className="text-zinc-300 bg-zinc-800 px-1 py-0.5 rounded font-mono text-[10px]">v2.1 Final</code> of <span className="text-zinc-100 font-semibold">B-Trees and AVL Self-Balancing Trees</span>
-                </p>
-                <p className="text-[10px] text-zinc-500">10 minutes ago • Pinned to commit <span className="font-mono">#b7f92a</span></p>
-              </div>
-            </div>
+                  <div className="flex items-center gap-2 shrink-0">
+                    <Link
+                      href={`/dashboard/notebooks/${nb.notebook_id}/manage`}
+                      className="px-3 py-1.5 rounded-lg bg-zinc-800 hover:bg-zinc-700 text-zinc-300 text-xs font-semibold border border-zinc-700/60 transition-colors flex items-center gap-1.5"
+                    >
+                      <Settings className="w-3.5 h-3.5 text-zinc-400" />
+                      <span>Manage</span>
+                    </Link>
 
-            <div className="py-3 flex items-start gap-3">
-              <div className="p-1.5 rounded-lg bg-amber-500/10 text-amber-400 shrink-0 mt-0.5">
-                <CircleDot className="w-3.5 h-3.5" />
-              </div>
-              <div className="text-xs space-y-0.5">
-                <p className="text-zinc-200 font-medium">
-                  <span className="text-amber-400">@bob</span> opened Issue <span className="font-semibold">#14: Fix typo in AVL double rotation</span> targeting <code className="text-zinc-300 bg-zinc-800 px-1 py-0.5 rounded font-mono text-[10px]">Slot #42</code>
-                </p>
-                <p className="text-[10px] text-zinc-500">2 hours ago • Branch <span className="font-mono">issue-14-avl-rotation</span> created</p>
-              </div>
-            </div>
+                    <Link
+                      href={`/dashboard/notebooks/${nb.notebook_id}`}
+                      className="px-3.5 py-1.5 rounded-lg bg-emerald-600 hover:bg-emerald-500 text-zinc-950 text-xs font-bold transition-colors flex items-center gap-1.5 shadow-sm"
+                    >
+                      <BookOpen className="w-3.5 h-3.5" />
+                      <span>Read Notebook</span>
+                    </Link>
+                  </div>
+                </div>
 
-            <div className="py-3 flex items-start gap-3">
-              <div className="p-1.5 rounded-lg bg-blue-500/10 text-blue-400 shrink-0 mt-0.5">
-                <GitPullRequest className="w-3.5 h-3.5" />
+                {/* Notes List inside Notebook */}
+                {notes.length === 0 ? (
+                  <div className="text-center py-8 border border-dashed border-zinc-800/80 rounded-xl text-zinc-500 text-xs">
+                    <p>No notes in this notebook yet.</p>
+                  </div>
+                ) : (
+                  <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+                    {notes.map((note) => (
+                      <div
+                        key={note.note_id}
+                        className="p-4.5 rounded-xl bg-zinc-950/60 hover:bg-zinc-900/90 border border-zinc-800/90 hover:border-emerald-500/40 hover:shadow-lg transition-all duration-200 flex flex-col justify-between gap-3.5 group relative"
+                      >
+                        <div className="space-y-1.5">
+                          <div className="flex items-start justify-between gap-2">
+                            <Link
+                              href={`/dashboard/notebooks/${nb.notebook_id}/notes/${note.note_id}`}
+                              className="font-semibold text-xs text-zinc-200 group-hover:text-emerald-400 transition-colors line-clamp-1"
+                              title={note.title}
+                            >
+                              {note.title}
+                            </Link>
+                          </div>
+
+                          <div className="flex items-center gap-2 text-[11px] text-zinc-500 font-mono">
+                            <span>{note.blocks_count} {note.blocks_count === 1 ? 'block' : 'blocks'}</span>
+                            {note.open_issues_count > 0 && (
+                              <>
+                                <span>•</span>
+                                <span className="text-amber-400 flex items-center gap-1">
+                                  <CircleDot className="w-3 h-3" />
+                                  {note.open_issues_count} open issue{note.open_issues_count > 1 ? 's' : ''}
+                                </span>
+                              </>
+                            )}
+                            {note.active_branches_count > 0 && (
+                              <>
+                                <span>•</span>
+                                <span className="text-purple-400 flex items-center gap-1">
+                                  <GitBranch className="w-3 h-3" />
+                                  {note.active_branches_count} branch{note.active_branches_count > 1 ? 'es' : ''}
+                                </span>
+                              </>
+                            )}
+                          </div>
+                        </div>
+
+                        {/* Note Actions Toolbar */}
+                        <div className="pt-2 border-t border-zinc-850/80 flex items-center justify-between text-xs">
+                          <Link
+                            href={`/dashboard/notebooks/${nb.notebook_id}/notes/${note.note_id}`}
+                            className="text-zinc-400 hover:text-zinc-100 transition-colors flex items-center gap-1 text-[11px]"
+                          >
+                            <Eye className="w-3 h-3 text-zinc-500" />
+                            <span>Read</span>
+                          </Link>
+
+                          <div className="flex items-center gap-1.5">
+                            <Link
+                              href={`/dashboard/notebooks/${nb.notebook_id}/notes/${note.note_id}/tree`}
+                              className="p-1.5 rounded hover:bg-zinc-800 text-zinc-400 hover:text-blue-400 transition-colors"
+                              title="Commit Tree Graph"
+                            >
+                              <GitBranch className="w-3.5 h-3.5" />
+                            </Link>
+
+                            <Link
+                              href={`/dashboard/notebooks/${nb.notebook_id}/notes/${note.note_id}/branches`}
+                              className="p-1.5 rounded hover:bg-zinc-800 text-zinc-400 hover:text-purple-400 transition-colors"
+                              title="Branches"
+                            >
+                              <GitFork className="w-3.5 h-3.5" />
+                            </Link>
+
+                            <Link
+                              href={`/dashboard/notebooks/${nb.notebook_id}/notes/${note.note_id}/issues`}
+                              className="p-1.5 rounded hover:bg-zinc-800 text-zinc-400 hover:text-amber-400 transition-colors"
+                              title="Issues"
+                            >
+                              <CircleDot className="w-3.5 h-3.5" />
+                            </Link>
+
+                            <Link
+                              href={`/dashboard/notebooks/${nb.notebook_id}/notes/${note.note_id}/edit`}
+                              className="p-1.5 rounded hover:bg-zinc-800 text-zinc-400 hover:text-emerald-400 transition-colors"
+                              title="Block Editor"
+                            >
+                              <Edit className="w-3.5 h-3.5" />
+                            </Link>
+                          </div>
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                )}
               </div>
-              <div className="text-xs space-y-0.5">
-                <p className="text-zinc-200 font-medium">
-                  <span className="text-blue-400">@alice</span> merged branch <span className="font-mono text-zinc-300">issue-12-dijkstra-proof</span> into <span className="text-emerald-400 font-mono">main</span>
-                </p>
-                <p className="text-[10px] text-zinc-500">1 day ago • Manifest updated across 62 slots</p>
-              </div>
-            </div>
-          </div>
+            );
+          })}
         </div>
       </div>
     </main>
@@ -1086,9 +706,11 @@ export function HomeFeed({
 // ==========================================
 
 export function ProfileModal({
+  user,
   isOpen,
   onClose,
 }: {
+  user: UserWithStats;
   isOpen: boolean;
   onClose: () => void;
 }) {
@@ -1118,7 +740,7 @@ export function ProfileModal({
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/70 backdrop-blur-sm animate-in fade-in duration-150">
       <div
-        className="w-full max-w-2xl bg-zinc-900 border border-zinc-800 rounded-2xl shadow-2xl overflow-hidden flex flex-col max-h-[90vh]"
+        className="w-full max-w-2xl bg-zinc-900 border border-zinc-800 rounded-2xl shadow-2xl overflow-hidden flex flex-col max-h-[90vh] animate-scale-in"
         onClick={(e) => e.stopPropagation()}
       >
         {/* Header */}
@@ -1151,7 +773,7 @@ export function ProfileModal({
             }`}
           >
             <UserIcon className="w-3.5 h-3.5" />
-            Overview
+            Profile & Overview
           </button>
           <button
             onClick={() => setActiveTab("permissions")}
@@ -1173,7 +795,7 @@ export function ProfileModal({
             }`}
           >
             <Database className="w-3.5 h-3.5" />
-            CAS Deduplication
+            Storage & CAS
           </button>
           <button
             onClick={() => setActiveTab("keys")}
@@ -1194,20 +816,26 @@ export function ProfileModal({
             <div className="space-y-6">
               {/* Profile Card Summary */}
               <div className="flex flex-col sm:flex-row items-start sm:items-center gap-4 p-4 rounded-xl bg-zinc-950/60 border border-zinc-800">
-                <img
-                  src={currentUser.avatarUrl}
-                  alt={currentUser.name}
-                  className="w-16 h-16 rounded-full object-cover ring-2 ring-emerald-500/40"
-                />
+                <div className="w-16 h-16 rounded-full bg-emerald-500/10 border border-emerald-500/30 flex items-center justify-center text-emerald-400 font-bold text-xl overflow-hidden ring-2 ring-emerald-500/40">
+                  {user.avatar_url ? (
+                    <img
+                      src={user.avatar_url}
+                      alt={user.username}
+                      className="w-full h-full object-cover"
+                    />
+                  ) : (
+                    user.username[0]?.toUpperCase()
+                  )}
+                </div>
                 <div className="flex-1 space-y-1">
                   <div className="flex items-center gap-2">
-                    <h3 className="text-base font-bold text-zinc-100">{currentUser.name}</h3>
+                    <h3 className="text-base font-bold text-zinc-100">{user.username}</h3>
                     <span className="px-2 py-0.5 rounded-full text-[10px] font-mono font-bold bg-emerald-500/10 text-emerald-400 border border-emerald-500/20">
-                      {currentUser.role}
+                      {user.system_role || 'USER'}
                     </span>
                   </div>
-                  <p className="text-xs text-zinc-400 font-mono">@{currentUser.username} • {currentUser.email}</p>
-                  <p className="text-xs text-zinc-300 pt-1">{currentUser.bio}</p>
+                  <p className="text-xs text-zinc-400 font-mono">@{user.username} • {user.email}</p>
+                  <p className="text-xs text-zinc-300 pt-1">Collaborative author on BookWorm CAS platform</p>
                 </div>
               </div>
 
@@ -1218,7 +846,7 @@ export function ProfileModal({
                     <Folder className="w-3.5 h-3.5 text-purple-400" />
                     Notebooks
                   </div>
-                  <div className="text-xl font-bold text-zinc-100 font-mono">{currentUser.stats.notebooksCount}</div>
+                  <div className="text-xl font-bold text-zinc-100 font-mono">{user.stats.notebooks_count}</div>
                 </div>
 
                 <div className="p-3 rounded-xl bg-zinc-950/40 border border-zinc-800">
@@ -1226,7 +854,7 @@ export function ProfileModal({
                     <BookOpen className="w-3.5 h-3.5 text-emerald-400" />
                     Notes Owned
                   </div>
-                  <div className="text-xl font-bold text-zinc-100 font-mono">{currentUser.stats.notesCount}</div>
+                  <div className="text-xl font-bold text-zinc-100 font-mono">{user.stats.notes_count}</div>
                 </div>
 
                 <div className="p-3 rounded-xl bg-zinc-950/40 border border-zinc-800">
@@ -1234,7 +862,7 @@ export function ProfileModal({
                     <Layers className="w-3.5 h-3.5 text-blue-400" />
                     Contributed
                   </div>
-                  <div className="text-xl font-bold text-zinc-100 font-mono">{currentUser.stats.contributedCount}</div>
+                  <div className="text-xl font-bold text-zinc-100 font-mono">{user.stats.contributed_count}</div>
                 </div>
 
                 <div className="p-3 rounded-xl bg-zinc-950/40 border border-zinc-800">
@@ -1242,28 +870,30 @@ export function ProfileModal({
                     <GitCommit className="w-3.5 h-3.5 text-amber-400" />
                     Commits
                   </div>
-                  <div className="text-xl font-bold text-zinc-100 font-mono">{currentUser.stats.commitsCount}</div>
+                  <div className="text-xl font-bold text-zinc-100 font-mono">{user.stats.commits_count}</div>
                 </div>
               </div>
 
               {/* Account Details Form */}
               <div className="space-y-4">
-                <h4 className="text-xs font-semibold text-zinc-300 uppercase tracking-wider">Display Settings</h4>
+                <h4 className="text-xs font-semibold text-zinc-300 uppercase tracking-wider">Account Information</h4>
                 <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                   <div>
-                    <label className="block text-[11px] text-zinc-400 mb-1">Display Name</label>
+                    <label className="block text-[11px] text-zinc-400 mb-1">Username</label>
                     <input
                       type="text"
-                      defaultValue={currentUser.name}
-                      className="w-full px-3 py-2 text-xs rounded-lg bg-zinc-950/70 border border-zinc-800 text-zinc-200 focus:outline-none focus:border-emerald-500/50"
+                      readOnly
+                      defaultValue={user.username}
+                      className="w-full px-3 py-2 text-xs rounded-lg bg-zinc-950/70 border border-zinc-800 text-zinc-200 focus:outline-none"
                     />
                   </div>
                   <div>
                     <label className="block text-[11px] text-zinc-400 mb-1">Email Address</label>
                     <input
                       type="email"
-                      defaultValue={currentUser.email}
-                      className="w-full px-3 py-2 text-xs rounded-lg bg-zinc-950/70 border border-zinc-800 text-zinc-200 focus:outline-none focus:border-emerald-500/50"
+                      readOnly
+                      defaultValue={user.email}
+                      className="w-full px-3 py-2 text-xs rounded-lg bg-zinc-950/70 border border-zinc-800 text-zinc-200 focus:outline-none"
                     />
                   </div>
                 </div>
@@ -1394,26 +1024,120 @@ export function CreateModal({
   isOpen,
   initialType,
   notebooks = [],
+  dashboardNotes = [],
+  userRoles = [],
   userId,
   onClose,
   onSuccess,
 }: {
   isOpen: boolean;
   initialType: "notebook" | "note" | "issue" | "branch" | "fork";
-  notebooks?: Array<{ notebook_id: string; title: string; }>;
+  notebooks?: Array<{ notebook_id: string; title: string; owner_id?: string; }>;
+  dashboardNotes?: DashboardNoteItem[];
+  userRoles?: Array<{ notebook_id: string; role_type: string; }>;
   userId: string;
   onClose: () => void;
   onSuccess: (message: string) => void;
 }) {
+  const router = useRouter();
   const [activeType, setActiveType] = useState<"notebook" | "note" | "issue" | "branch" | "fork">(initialType);
   const [title, setTitle] = useState("");
   const [description, setDescription] = useState("");
   const [visibility, setVisibility] = useState<"PRIVATE" | "UNLISTED" | "PUBLIC">("PRIVATE");
+
+  // Notebooks where user has permission to create issues (OWNER, MAINTAINER, or CONTRIBUTOR)
+  const issuePermittedNotebooks = React.useMemo(() => {
+    return (notebooks || []).filter((nb) => {
+      const isOwner = (nb as any).owner_id === userId;
+      const role = userRoles?.find((r) => r.notebook_id === nb.notebook_id)?.role_type;
+      return isOwner || ['OWNER', 'MAINTAINER', 'CONTRIBUTOR'].includes(role || '');
+    });
+  }, [notebooks, userRoles, userId]);
+
+  // Notebooks where user has permission to create notes (OWNER or MAINTAINER)
+  const notePermittedNotebooks = React.useMemo(() => {
+    return (notebooks || []).filter((nb) => {
+      const isOwner = (nb as any).owner_id === userId;
+      const role = userRoles?.find((r) => r.notebook_id === nb.notebook_id)?.role_type;
+      return isOwner || ['OWNER', 'MAINTAINER'].includes(role || '');
+    });
+  }, [notebooks, userRoles, userId]);
+
   const [selectedNotebook, setSelectedNotebook] = useState<string>("");
-  const [targetSlot, setTargetSlot] = useState("Slot #42 (Paragraph: AVL double rotation)");
-  const [assignee, setAssignee] = useState("@alice");
+  
+  // Cascading Issue Selector States
+  const [issueNotebookId, setIssueNotebookId] = useState<string>("");
+  const [issueNoteId, setIssueNoteId] = useState<string>("");
+  const [issueBlocks, setIssueBlocks] = useState<Array<{ slot_id: string; block_type: string; content_text: string }>>([]);
+  const [issueSlotId, setIssueSlotId] = useState<string>("");
+  const [isLoadingBlocks, setIsLoadingBlocks] = useState(false);
+
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [error, setError] = useState<string | null>(null);
+
+  // Available notes for the selected notebook where user has contributor/maintainer/owner role
+  const notesInSelectedNotebook = React.useMemo(
+    () => dashboardNotes.filter((n) => n.notebook_id === issueNotebookId && (n as any).role_type !== 'VIEWER'),
+    [dashboardNotes, issueNotebookId]
+  );
+
+  // Synchronize initial notebook selection for notes and issues based on permissions
+  React.useEffect(() => {
+    if (!isOpen) return;
+    if (notePermittedNotebooks.length > 0 && (!selectedNotebook || !notePermittedNotebooks.some(nb => nb.notebook_id === selectedNotebook))) {
+      setSelectedNotebook(notePermittedNotebooks[0].notebook_id);
+    }
+  }, [isOpen, notePermittedNotebooks, selectedNotebook]);
+
+  React.useEffect(() => {
+    if (!isOpen) return;
+    if (issuePermittedNotebooks.length > 0 && (!issueNotebookId || !issuePermittedNotebooks.some(nb => nb.notebook_id === issueNotebookId))) {
+      setIssueNotebookId(issuePermittedNotebooks[0].notebook_id);
+    } else if (issuePermittedNotebooks.length === 0) {
+      setIssueNotebookId("");
+    }
+  }, [isOpen, issuePermittedNotebooks, issueNotebookId]);
+
+  React.useEffect(() => {
+    if (!isOpen) return;
+    if (notesInSelectedNotebook.length > 0) {
+      if (!issueNoteId || !notesInSelectedNotebook.some((n) => n.note_id === issueNoteId)) {
+        setIssueNoteId(notesInSelectedNotebook[0].note_id);
+      }
+    } else if (issueNoteId !== "") {
+      setIssueNoteId("");
+      setIssueBlocks([]);
+      setIssueSlotId("");
+    }
+  }, [isOpen, notesInSelectedNotebook, issueNoteId]);
+
+  // Fetch blocks when selected note changes
+  React.useEffect(() => {
+    if (!isOpen) return;
+    if (activeType === "issue" && issueNoteId) {
+      setIsLoadingBlocks(true);
+      import('@/actions/notes').then(({ getNoteWithBlocks }) => {
+        getNoteWithBlocks(issueNoteId)
+          .then((res) => {
+            if (res.success && 'note' in res && res.note && Array.isArray((res.note as any).blocks)) {
+              const blocks = (res.note as any).blocks;
+              setIssueBlocks(blocks);
+              setIssueSlotId(blocks[0]?.slot_id || "");
+            } else {
+              setIssueBlocks([]);
+              setIssueSlotId("");
+            }
+          })
+          .catch((err) => {
+            console.error('Failed to load blocks:', err);
+            setIssueBlocks([]);
+          })
+          .finally(() => {
+            setIsLoadingBlocks(false);
+          });
+      });
+    }
+  }, [activeType, issueNoteId]);
 
   // Reset form when modal opens/closes
   React.useEffect(() => {
@@ -1430,13 +1154,11 @@ export function CreateModal({
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
-    console.log('CreateModal: Form submitted', { activeType, title, description, visibility });
     setIsSubmitting(true);
     setError(null);
 
     try {
       if (activeType === "notebook") {
-        console.log('CreateModal: Calling createNotebook...');
         const { createNotebook } = await import('@/actions/notebooks');
         const result = await createNotebook({
           title,
@@ -1445,45 +1167,61 @@ export function CreateModal({
           userId,
         });
 
-        console.log('CreateModal: Result received:', result);
-
         if (result.success) {
-          console.log('CreateModal: Success! Showing toast.');
           onSuccess(`Notebook "${title}" created successfully!`);
           onClose();
         } else {
-          console.error('CreateModal: Server returned error:', result.error);
           setError(result.error || 'Failed to create notebook');
         }
       } else if (activeType === "note") {
-        console.log('CreateModal: Calling createNote...');
+        const targetNb = selectedNotebook || notebooks[0]?.notebook_id;
+        if (!targetNb) {
+          setError('Please select or create a notebook first');
+          return;
+        }
+
         const { createNote } = await import('@/actions/notes');
         const result = await createNote({
-          notebookId: selectedNotebook,
+          notebookId: targetNb,
           title,
           description,
           visibility,
           userId,
         });
 
-        console.log('CreateModal: Note result:', result);
-
         if (result.success) {
-          console.log('CreateModal: Note created successfully!');
           onSuccess(`Note "${title}" created successfully!`);
           onClose();
         } else {
-          console.error('CreateModal: Server returned error:', result.error);
           setError(result.error || 'Failed to create note');
         }
+      } else if (activeType === "issue") {
+        if (!issueNoteId) {
+          setError('Please select a note to target');
+          return;
+        }
+        if (!issueSlotId) {
+          setError('Please select a block to target with this issue');
+          return;
+        }
+
+        const { createIssue } = await import('@/actions/issues');
+        const result = await createIssue({
+          noteId: issueNoteId,
+          slotId: issueSlotId,
+          title: title.trim(),
+          description: description.trim() || undefined,
+        });
+
+        if (result.success && result.issue) {
+          onSuccess(`Issue created! Attempt branch "${result.issue.branch_name}" ready.`);
+          onClose();
+          router.push(`/dashboard/notebooks/${issueNotebookId}/notes/${issueNoteId}/edit?branch=${result.issue.branch_id}`);
+        } else {
+          setError(result.error || 'Failed to create issue');
+        }
       } else {
-        // Other types not yet implemented
-        let msg = "";
-        if (activeType === "issue") msg = `Issue "${title}" created. Target block locked & branch spawned!`;
-        if (activeType === "branch") msg = `Branch "${title}" spawned for parallel editing!`;
-        if (activeType === "fork") msg = `Note forked with zero-cost CAS reference!`;
-        
-        onSuccess(msg);
+        onSuccess(`Resource created successfully!`);
         onClose();
       }
     } catch (err: any) {
@@ -1497,7 +1235,7 @@ export function CreateModal({
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/70 backdrop-blur-sm animate-in fade-in duration-150">
       <div
-        className="w-full max-w-lg bg-zinc-900 border border-zinc-800 rounded-2xl shadow-2xl overflow-hidden flex flex-col"
+        className="w-full max-w-lg bg-zinc-900 border border-zinc-800 rounded-2xl shadow-2xl overflow-hidden flex flex-col animate-scale-in"
         onClick={(e) => e.stopPropagation()}
       >
         {/* Header */}
@@ -1604,25 +1342,133 @@ export function CreateModal({
             />
           </div>
 
+          {/* Notebook selector when creating a Note */}
+          {activeType === "note" && (
+            <div>
+              <label className="block text-zinc-300 font-semibold mb-1">Target Notebook</label>
+              {notePermittedNotebooks.length === 0 ? (
+                <div className="p-2.5 rounded-lg bg-red-950/30 border border-red-800/40 text-red-300 text-xs">
+                  You must be an Owner or Maintainer of a notebook to create new notes in it.
+                </div>
+              ) : (
+                <select
+                  value={selectedNotebook}
+                  onChange={(e) => setSelectedNotebook(e.target.value)}
+                  className="w-full px-3 py-2 rounded-lg bg-zinc-950 border border-zinc-800 text-zinc-200 focus:outline-none focus:border-emerald-500/50"
+                >
+                  {notePermittedNotebooks.map((nb) => (
+                    <option key={nb.notebook_id} value={nb.notebook_id}>
+                      {nb.title}
+                    </option>
+                  ))}
+                </select>
+              )}
+            </div>
+          )}
+
+          {/* Cascading Notebook -> Note -> Block Selector when creating an Issue */}
           {activeType === "issue" && (
-            <div className="space-y-3 p-3.5 rounded-xl bg-amber-950/20 border border-amber-500/20">
-              <div>
-                <label className="block text-amber-300 font-semibold mb-1">Target Logical Block Slot (Locked for this issue)</label>
-                <input
-                  type="text"
-                  value={targetSlot}
-                  onChange={(e) => setTargetSlot(e.target.value)}
-                  className="w-full px-3 py-1.5 rounded-lg bg-zinc-950 border border-zinc-800 text-zinc-200 font-mono"
-                />
+            <div className="space-y-3.5 p-4 rounded-xl bg-amber-950/20 border border-amber-500/20 text-xs">
+              <div className="flex items-center gap-1.5 text-amber-400 font-semibold">
+                <CircleDot className="w-3.5 h-3.5" />
+                <span>Zero-Conflict Block Issue Target</span>
               </div>
+              
+              {/* 1. Choose Notebook */}
               <div>
-                <label className="block text-amber-300 font-semibold mb-1">Assign Contributor</label>
-                <input
-                  type="text"
-                  value={assignee}
-                  onChange={(e) => setAssignee(e.target.value)}
-                  className="w-full px-3 py-1.5 rounded-lg bg-zinc-950 border border-zinc-800 text-zinc-200 font-mono"
-                />
+                <label className="block text-amber-300 font-medium mb-1">1. Choose Notebook</label>
+                {issuePermittedNotebooks.length === 0 ? (
+                  <div className="p-2.5 rounded-lg bg-red-950/30 border border-red-800/40 text-red-300 text-xs">
+                    You do not hold Contributor, Maintainer, or Owner permissions on any notebook to create issues.
+                  </div>
+                ) : (
+                  <select
+                    value={issueNotebookId}
+                    onChange={(e) => setIssueNotebookId(e.target.value)}
+                    className="w-full px-3 py-2 rounded-lg bg-zinc-950 border border-zinc-800 text-zinc-200 focus:outline-none focus:border-amber-500/50"
+                  >
+                    {issuePermittedNotebooks.map((nb) => (
+                      <option key={nb.notebook_id} value={nb.notebook_id}>
+                        {nb.title}
+                      </option>
+                    ))}
+                  </select>
+                )}
+              </div>
+
+              {/* 2. Choose Note */}
+              <div>
+                <label className="block text-amber-300 font-medium mb-1">2. Choose Note</label>
+                {notesInSelectedNotebook.length === 0 ? (
+                  <p className="text-zinc-500 italic p-2 bg-zinc-950 rounded-lg border border-zinc-800">
+                    {issueNotebookId ? 'No writable notes found in this notebook for your role.' : 'No notebook selected.'}
+                  </p>
+                ) : (
+                  <select
+                    value={issueNoteId}
+                    onChange={(e) => setIssueNoteId(e.target.value)}
+                    className="w-full px-3 py-2 rounded-lg bg-zinc-950 border border-zinc-800 text-zinc-200 focus:outline-none focus:border-amber-500/50"
+                  >
+                    {notesInSelectedNotebook.map((note) => (
+                      <option key={note.note_id} value={note.note_id}>
+                        {note.title} ({note.blocks_count} blocks)
+                      </option>
+                    ))}
+                  </select>
+                )}
+              </div>
+
+              {/* 3. Choose Block */}
+              <div>
+                <label className="block text-amber-300 font-medium mb-1">
+                  3. Choose Target Block (Locks this block slot)
+                </label>
+                {isLoadingBlocks ? (
+                  <div className="flex items-center gap-2 text-zinc-400 p-2.5 bg-zinc-950 rounded-lg border border-zinc-800 font-mono text-[11px]">
+                    <span className="w-3 h-3 border-2 border-amber-400 border-t-transparent rounded-full animate-spin" />
+                    Loading note blocks...
+                  </div>
+                ) : issueBlocks.length === 0 ? (
+                  <p className="text-zinc-500 italic p-2 bg-zinc-950 rounded-lg border border-zinc-800">
+                    This note has no blocks yet.
+                  </p>
+                ) : (
+                  <div className="space-y-2">
+                    <select
+                      value={issueSlotId}
+                      onChange={(e) => setIssueSlotId(e.target.value)}
+                      className="w-full px-3 py-2 rounded-lg bg-zinc-950 border border-zinc-800 text-zinc-200 focus:outline-none focus:border-amber-500/50 font-mono text-[11px]"
+                    >
+                      {issueBlocks.map((blk, idx) => {
+                        const snippet = blk.content_text
+                          ? blk.content_text.replace(/[\n\r]+/g, ' ').substring(0, 45)
+                          : 'Empty block';
+                        return (
+                          <option key={blk.slot_id} value={blk.slot_id}>
+                            Block #{idx + 1} [{blk.block_type}]: {snippet}...
+                          </option>
+                        );
+                      })}
+                    </select>
+
+                    {/* Selected Block Preview */}
+                    {(() => {
+                      const selectedBlk = issueBlocks.find((b) => b.slot_id === issueSlotId);
+                      if (!selectedBlk) return null;
+                      return (
+                        <div className="p-2.5 rounded-lg bg-zinc-950/80 border border-zinc-800/90 text-zinc-400 text-[11px] space-y-1">
+                          <div className="flex items-center justify-between text-[10px] font-mono text-amber-400/90">
+                            <span>TYPE: {selectedBlk.block_type}</span>
+                            <span>SLOT: {selectedBlk.slot_id.substring(0, 8)}...</span>
+                          </div>
+                          <p className="line-clamp-2 italic text-zinc-300">
+                            "{selectedBlk.content_text || 'No text content'}"
+                          </p>
+                        </div>
+                      );
+                    })()}
+                  </div>
+                )}
               </div>
             </div>
           )}
@@ -1734,33 +1580,34 @@ import { Notebook } from '@/actions/notebooks';
 interface DashboardClientProps {
   user: UserWithStats;
   notebooks: Notebook[];
+  unmergedBranches?: UnmergedBranchItem[];
+  dashboardNotes?: DashboardNoteItem[];
+  userRoles?: Array<{ notebook_id: string; role_type: string }>;
+  analytics?: StorageAnalytics;
+  activities?: ActivityItem[];
 }
 
-export default function DashboardClient({ user, notebooks }: DashboardClientProps) {
+export default function DashboardClient({ 
+  user, 
+  notebooks,
+  unmergedBranches = [],
+  dashboardNotes = [],
+  userRoles = [],
+  analytics,
+  activities = [],
+}: DashboardClientProps) {
   const [isProfileOpen, setIsProfileOpen] = useState(false);
   const [isCreateOpen, setIsCreateOpen] = useState(false);
   const [createType, setCreateType] = useState<"notebook" | "note" | "issue" | "branch" | "fork">("note");
+  const [isForkOpen, setIsForkOpen] = useState(false);
 
-  // Update the global currentUser object with real data
-  // This is a temporary solution until we refactor child components to use props
-  React.useEffect(() => {
-    Object.assign(currentUser, {
-      name: user.username,
-      username: user.username,
-      email: user.email,
-      avatarUrl: user.avatar_url || currentUser.avatarUrl,
-      stats: {
-        notebooksCount: user.stats.notebooks_count,
-        notesCount: user.stats.notes_count,
-        contributedCount: user.stats.contributed_count,
-        issuesCount: user.stats.issues_count,
-        commitsCount: user.stats.commits_count,
-      },
-    });
-  }, [user]);
   const [toastMessage, setToastMessage] = useState<string | null>(null);
 
   const handleOpenCreate = (type: "notebook" | "note" | "issue" | "branch" | "fork") => {
+    if (type === "fork") {
+      setIsForkOpen(true);
+      return;
+    }
     setCreateType(type);
     setIsCreateOpen(true);
   };
@@ -1772,10 +1619,16 @@ export default function DashboardClient({ user, notebooks }: DashboardClientProp
     }, 4000);
   };
 
+  const firstNote = dashboardNotes[0];
+
   return (
     <div className="min-h-screen bg-zinc-950 text-zinc-100 flex flex-col selection:bg-emerald-500/30 selection:text-emerald-200">
       {/* 1. TOP NAVIGATION BAR */}
-      <TopNav onOpenCreate={handleOpenCreate} />
+      <TopNav 
+        userId={user.user_id} 
+        currentUser={user} 
+        onOpenCreate={handleOpenCreate} 
+      />
 
       {/* Toast Notification */}
       {toastMessage && (
@@ -1795,17 +1648,30 @@ export default function DashboardClient({ user, notebooks }: DashboardClientProp
       <div className="flex flex-col lg:flex-row flex-1">
         {/* LEFT: Profile & Notes/Notebooks Explorer */}
         <LeftSidebar
+          user={user}
           notebooks={notebooks}
+          dashboardNotes={dashboardNotes}
+          userRoles={userRoles}
           onOpenProfile={() => setIsProfileOpen(true)}
           onOpenCreate={handleOpenCreate}
         />
 
-        {/* MIDDLE & RIGHT: Home Feed Placeholder */}
-        <HomeFeed onOpenCreate={handleOpenCreate} />
+        {/* MIDDLE & RIGHT: Home Feed with VC Hub & Real Explorer */}
+        <HomeFeed 
+          user={user}
+          notebooks={notebooks}
+          unmergedBranches={unmergedBranches}
+          dashboardNotes={dashboardNotes}
+          userRoles={userRoles}
+          analytics={analytics}
+          activities={activities}
+          onOpenCreate={handleOpenCreate} 
+        />
       </div>
 
       {/* 3. MODALS */}
       <ProfileModal
+        user={user}
         isOpen={isProfileOpen}
         onClose={() => setIsProfileOpen(false)}
       />
@@ -1814,10 +1680,28 @@ export default function DashboardClient({ user, notebooks }: DashboardClientProp
         isOpen={isCreateOpen}
         initialType={createType}
         notebooks={notebooks}
+        dashboardNotes={dashboardNotes}
+        userRoles={userRoles}
         userId={user.user_id}
         onClose={() => setIsCreateOpen(false)}
         onSuccess={handleShowToast}
       />
+
+      {/* Zero-Cost Fork Note Modal */}
+      {firstNote && (
+        <ForkNoteModal
+          noteId={firstNote.note_id}
+          noteTitle={firstNote.title}
+          userId={user.user_id}
+          userNotebooks={notebooks.map(nb => ({
+            notebook_id: nb.notebook_id,
+            title: nb.title,
+            role_type: userRoles.find(r => r.notebook_id === nb.notebook_id)?.role_type || 'OWNER',
+          }))}
+          isOpen={isForkOpen}
+          onClose={() => setIsForkOpen(false)}
+        />
+      )}
     </div>
   );
 }

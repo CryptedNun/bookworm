@@ -6,7 +6,9 @@
  */
 
 import { getNotebook } from '@/actions/notebooks';
+import type { Notebook } from '@/actions/notebooks';
 import { getNotebookNotesWithContent } from '@/actions/notes';
+import type { Note } from '@/actions/notes';
 import { getCurrentUser } from '@/actions/auth';
 import { redirect } from 'next/navigation';
 import NotebookReader from './reader';
@@ -33,11 +35,11 @@ export default async function NotebookPage({ params }: PageProps) {
 
   // Fetch notes with content
   const notesResult = await getNotebookNotesWithContent(notebookId);
-  const notes = notesResult.success ? notesResult.notes || [] : [];
+  const notes = (notesResult.success ? notesResult.notes || [] : []) as unknown as Array<Note & { content: string }>;
 
   return (
     <NotebookReader 
-      notebook={notebookResult.notebook} 
+      notebook={notebookResult.notebook as Notebook} 
       notes={notes}
       user={user}
     />

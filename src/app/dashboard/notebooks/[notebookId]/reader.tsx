@@ -10,6 +10,7 @@ import {
   List,
   X,
   Edit,
+  CircleDot,
 } from 'lucide-react';
 import RobustMarkdown from '@/components/markdown/RobustMarkdown';
 import type { Notebook } from '@/actions/notebooks';
@@ -74,10 +75,14 @@ export default function NotebookReader({ notebook, notes, user }: NotebookReader
               Table of Contents
             </button>
 
-            <button className="px-3 py-2 rounded-lg bg-zinc-800 hover:bg-zinc-700 text-zinc-200 text-sm font-medium transition-colors flex items-center gap-2">
-              <GitBranch className="w-4 h-4" />
-              Branch
-            </button>
+            <Link
+              href={`/dashboard/notebooks/${notebook.notebook_id}/manage`}
+              className="px-3 py-2 rounded-lg bg-emerald-600 hover:bg-emerald-500 text-zinc-950 text-sm font-semibold transition-colors flex items-center gap-2 shadow-sm"
+              title="Manage notes, ordering, and permissions"
+            >
+              <Edit className="w-4 h-4" />
+              <span>Manage Notes</span>
+            </Link>
           </div>
         </div>
       </div>
@@ -165,13 +170,29 @@ export default function NotebookReader({ notebook, notes, user }: NotebookReader
                         <div className="text-sm text-zinc-500 mb-2">Chapter {chapterNumber}</div>
                         <h1 className="text-4xl font-bold text-zinc-100">{note.title}</h1>
                       </div>
-                      <Link
-                        href={`/dashboard/notebooks/${notebook.notebook_id}/notes/${note.note_id}/edit`}
-                        className="px-4 py-2 rounded-lg bg-emerald-500 hover:bg-emerald-400 text-zinc-950 text-sm font-medium transition-colors flex items-center gap-2"
-                      >
-                        <Edit className="w-4 h-4" />
-                        Edit Note
-                      </Link>
+                      <div className="flex items-center gap-2">
+                        {/* Issues & Contribute Link */}
+                        <Link
+                          href={`/dashboard/notebooks/${notebook.notebook_id}/notes/${note.note_id}/issues`}
+                          className="px-3 py-1.5 rounded-lg bg-zinc-800 hover:bg-zinc-700 text-amber-400 text-xs font-semibold transition-colors flex items-center gap-1.5 border border-zinc-700/60"
+                          title="View open issues and contribute fixes"
+                        >
+                          <CircleDot className="w-3.5 h-3.5" />
+                          <span>Issues & Contribute</span>
+                        </Link>
+
+                        {/* Direct Edit Note (only for OWNER or MAINTAINER) */}
+                        {['OWNER', 'MAINTAINER'].includes(note.role_type) && (
+                          <Link
+                            href={`/dashboard/notebooks/${notebook.notebook_id}/notes/${note.note_id}/edit`}
+                            className="px-3 py-1.5 rounded-lg bg-emerald-500 hover:bg-emerald-400 text-zinc-950 text-xs font-semibold transition-colors flex items-center gap-1.5 shadow-sm"
+                            title="Directly edit canonical main branch"
+                          >
+                            <Edit className="w-3.5 h-3.5" />
+                            <span>Edit Note</span>
+                          </Link>
+                        )}
+                      </div>
                     </div>
 
                     {/* Note Content */}

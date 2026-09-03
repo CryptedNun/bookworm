@@ -22,7 +22,7 @@ export interface Notebook {
 interface CreateNotebookInput {
   title: string;
   description?: string;
-  visibility?: 'PUBLIC' | 'PRIVATE' | 'UNLISTED';
+  visibility?: 'PUBLIC' | 'PRIVATE' | 'UNLISTED' | 'SHARED';
   userId: string;
 }
 
@@ -115,7 +115,7 @@ export async function createNotebook(input: CreateNotebookInput): Promise<Create
 /**
  * Get all notebooks for a user
  */
-export async function getNotebooks(userId: string) {
+export async function getNotebooks(userId: string): Promise<Notebook[]> {
   try {
     const notebooks = await sql`
       SELECT 
@@ -123,18 +123,27 @@ export async function getNotebooks(userId: string) {
         nb.title,
         nb.description,
         nb.visibility,
-        cr.role_type,
+        COALESCE(
+          (SELECT cr.role_type FROM collaborator_roles cr WHERE cr.resource_id = nb.notebook_id AND cr.user_id = ${userId} LIMIT 1),
+          CASE WHEN nb.owner_id = ${userId} THEN 'OWNER' ELSE 'VIEWER' END
+        ) as role_type,
         r.created_at,
         (SELECT COUNT(*) FROM notes n WHERE n.notebook_id = nb.notebook_id AND n.deleted_at IS NULL) as notes_count
       FROM notebooks nb
-      INNER JOIN collaborator_roles cr ON cr.resource_id = nb.notebook_id
       INNER JOIN resources r ON r.resource_id = nb.notebook_id
-      WHERE cr.user_id = ${userId}
-        AND nb.deleted_at IS NULL
+      WHERE nb.deleted_at IS NULL
+        AND (
+          nb.owner_id = ${userId}
+          OR nb.visibility = 'PUBLIC'
+          OR EXISTS (
+            SELECT 1 FROM collaborator_roles cr 
+            WHERE cr.resource_id = nb.notebook_id AND cr.user_id = ${userId}
+          )
+        )
       ORDER BY r.created_at DESC
     `;
 
-    return notebooks;
+    return notebooks as unknown as Notebook[];
   } catch (error) {
     console.error('Error fetching notebooks:', error);
     return [];
@@ -144,7 +153,7 @@ export async function getNotebooks(userId: string) {
 /**
  * Get user notebooks (wrapper for compatibility with dashboard page)
  */
-export async function getUserNotebooks() {
+export async function getUserNotebooks(): Promise<{ success: boolean; notebooks?: Notebook[]; error?: string }> {
   try {
     // Get current user from cookie
     const { cookies: getCookies } = await import('next/headers');
@@ -186,16 +195,25 @@ export async function getNotebook(notebookId: string, userId?: string) {
         nb.description,
         nb.visibility,
         r.created_at,
-        cr.role_type,
+        COALESCE(
+          (SELECT cr.role_type FROM collaborator_roles cr WHERE cr.resource_id = nb.notebook_id AND cr.user_id = ${userId} LIMIT 1),
+          CASE WHEN nb.owner_id = ${userId} THEN 'OWNER' ELSE 'VIEWER' END
+        ) as role_type,
         u.username as owner_username,
         u.email as owner_email
       FROM notebooks nb
-      INNER JOIN collaborator_roles cr ON cr.resource_id = nb.notebook_id
       INNER JOIN users u ON u.user_id = nb.owner_id
       INNER JOIN resources r ON r.resource_id = nb.notebook_id
       WHERE nb.notebook_id = ${notebookId}
-        AND cr.user_id = ${userId}
         AND nb.deleted_at IS NULL
+        AND (
+          nb.owner_id = ${userId}
+          OR nb.visibility = 'PUBLIC'
+          OR EXISTS (
+            SELECT 1 FROM collaborator_roles cr 
+            WHERE cr.resource_id = nb.notebook_id AND cr.user_id = ${userId}
+          )
+        )
     `;
 
     if (!notebook) {
@@ -254,8 +272,7 @@ export async function updateNotebook(
 
     await sql`
       UPDATE notebooks
-      SET ${sql.unsafe(updateFields.join(', '))},
-          updated_at = NOW()
+      SET ${sql.unsafe(updateFields.join(', '))}
       WHERE notebook_id = ${notebookId}
     `;
 

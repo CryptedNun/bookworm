@@ -9,30 +9,63 @@ import {
   CircleDot,
   GitPullRequest,
   BookMarked,
-  Bell,
   Plus,
   ChevronDown,
   FileText,
   FolderPlus,
   GitFork,
-  Check,
+  ShieldCheck,
+  LogOut,
+  Users,
+  ChevronDown as ChevronDownIcon,
 } from "lucide-react";
-import { sampleNotifications, NotificationItem } from "@/lib/mock-data";
+import NotificationsDropdown from "@/components/notifications/NotificationsDropdown";
+import RoleAuditorModal from "@/components/dashboard/RoleAuditorModal";
+import ThemeToggle from "@/components/theme/ThemeToggle";
+import { useRouter } from "next/navigation";
 
 interface TopNavProps {
+  userId?: string;
+  currentUser?: {
+    user_id?: string;
+    username?: string;
+    email?: string;
+    system_role?: string;
+    avatar_url?: string | null;
+  };
   onOpenCreate: (type: "notebook" | "note" | "issue" | "branch" | "fork") => void;
 }
 
-export function TopNav({ onOpenCreate }: TopNavProps) {
+export function TopNav({ userId = "", currentUser, onOpenCreate }: TopNavProps) {
+  const router = useRouter();
   const [searchQuery, setSearchQuery] = useState("");
-  const [showNotifications, setShowNotifications] = useState(false);
   const [showPlusMenu, setShowPlusMenu] = useState(false);
-  const [notifications, setNotifications] = useState<NotificationItem[]>(sampleNotifications);
+  const [showRoleMenu, setShowRoleMenu] = useState(false);
+  const [isAuditorOpen, setIsAuditorOpen] = useState(false);
+  const [isSwitchingRole, setIsSwitchingRole] = useState(false);
 
-  const unreadCount = notifications.filter((n) => n.unread).length;
+  const handleRoleSwitch = async (email: string) => {
+    setIsSwitchingRole(true);
+    try {
+      const { signIn } = await import("@/actions/auth");
+      await signIn(email, "password");
+      setShowRoleMenu(false);
+      window.location.href = "/dashboard";
+    } catch (err) {
+      console.error("Role switch error:", err);
+      setIsSwitchingRole(false);
+    }
+  };
 
-  const markAllRead = () => {
-    setNotifications((prev) => prev.map((n) => ({ ...n, unread: false })));
+  const handleLogout = async () => {
+    try {
+      const { signOut } = await import("@/actions/auth");
+      await signOut();
+      window.location.href = "/";
+    } catch (err) {
+      console.error("Logout error:", err);
+      window.location.href = "/";
+    }
   };
 
   return (
@@ -124,7 +157,7 @@ export function TopNav({ onOpenCreate }: TopNavProps) {
                   className="fixed inset-0 z-40"
                   onClick={() => setShowPlusMenu(false)}
                 />
-                <div className="absolute right-0 mt-2 w-56 rounded-xl bg-zinc-900 border border-zinc-800 shadow-2xl py-1.5 z-50 text-xs text-zinc-200">
+                <div className="absolute right-0 mt-2 w-56 rounded-xl bg-zinc-900 border border-zinc-800 shadow-2xl py-1.5 z-50 text-xs text-zinc-200 animate-popover-in">
                   <div className="px-3 py-1.5 text-[11px] font-semibold uppercase tracking-wider text-zinc-500 border-b border-zinc-800/80">
                     Quick Actions
                   </div>
@@ -205,65 +238,92 @@ export function TopNav({ onOpenCreate }: TopNavProps) {
             )}
           </div>
 
-          {/* Notifications Dropdown */}
+          {/* BUET CSE 216 Evaluation Audit Button */}
+          <button
+            onClick={() => setIsAuditorOpen(true)}
+            className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-emerald-500/10 hover:bg-emerald-500/20 text-emerald-400 border border-emerald-500/30 text-xs font-semibold transition-all cursor-pointer shadow-sm"
+            title="Run BUET CSE 216 REST & Authorization Audit"
+          >
+            <ShieldCheck className="w-3.5 h-3.5 text-emerald-400" />
+            <span className="hidden sm:inline">Evaluation Audit</span>
+          </button>
+
+          {/* Role Switcher Menu */}
           <div className="relative">
             <button
-              onClick={() => setShowNotifications(!showNotifications)}
-              className="relative p-2 rounded-lg bg-zinc-900 hover:bg-zinc-800 text-zinc-300 border border-zinc-800 hover:border-zinc-700 transition-colors cursor-pointer"
-              title="Notifications"
+              onClick={() => setShowRoleMenu(!showRoleMenu)}
+              className="flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg bg-zinc-900 hover:bg-zinc-850 border border-zinc-800 text-zinc-300 text-xs font-medium cursor-pointer"
+              title="Switch authenticated user role"
             >
-              <Bell className="w-3.5 h-3.5" />
-              {unreadCount > 0 && (
-                <span className="absolute top-1.5 right-1.5 w-2 h-2 rounded-full bg-emerald-500 ring-2 ring-zinc-950" />
-              )}
+              <Users className="w-3.5 h-3.5 text-purple-400" />
+              <span className="font-mono text-[11px] text-zinc-200">@{currentUser?.username || "alice"}</span>
+              <span className="px-1.5 py-0.2 rounded text-[9px] font-mono bg-purple-500/15 text-purple-300 border border-purple-500/30">
+                {currentUser?.system_role || "ADMIN"}
+              </span>
+              <ChevronDownIcon className="w-3 h-3 text-zinc-500" />
             </button>
 
-            {showNotifications && (
+            {showRoleMenu && (
               <>
-                <div
-                  className="fixed inset-0 z-40"
-                  onClick={() => setShowNotifications(false)}
-                />
-                <div className="absolute right-0 mt-2 w-80 rounded-xl bg-zinc-900 border border-zinc-800 shadow-2xl z-50 overflow-hidden">
-                  <div className="flex items-center justify-between px-3.5 py-2.5 bg-zinc-950/60 border-b border-zinc-800">
-                    <span className="text-xs font-semibold text-zinc-200">Notifications</span>
-                    {unreadCount > 0 && (
-                      <button
-                        onClick={markAllRead}
-                        className="text-[11px] text-emerald-400 hover:text-emerald-300 flex items-center gap-1 cursor-pointer"
-                      >
-                        <Check className="w-3 h-3" />
-                        Mark all as read
-                      </button>
-                    )}
+                <div className="fixed inset-0 z-40" onClick={() => setShowRoleMenu(false)} />
+                <div className="absolute right-0 mt-2 w-64 rounded-xl bg-zinc-900 border border-zinc-800 shadow-2xl py-1.5 z-50 text-xs text-zinc-200 divide-y divide-zinc-800/80 animate-popover-in">
+                  <div className="px-3 py-2 text-[11px] text-zinc-400 space-y-0.5">
+                    <div className="font-semibold text-zinc-200">Evaluation Role Switcher</div>
+                    <div className="text-[10px] text-zinc-500">Test role-level capabilities from clean state</div>
                   </div>
 
-                  <div className="max-h-72 overflow-y-auto divide-y divide-zinc-800/60">
-                    {notifications.map((n) => (
-                      <div
-                        key={n.id}
-                        className={`p-3 text-xs hover:bg-zinc-800/50 transition-colors ${
-                          n.unread ? "bg-emerald-950/10" : ""
-                        }`}
+                  <div className="py-1">
+                    {[
+                      { name: "Alice Walker", email: "alice@bookworm.dev", role: "OWNER / ADMIN", desc: "Full capabilities & delete permissions" },
+                      { name: "Bob Chen", email: "bob@bookworm.dev", role: "MAINTAINER", desc: "Can merge, delete blocked (403)" },
+                      { name: "Charlie Davis", email: "charlie@bookworm.dev", role: "CONTRIBUTOR", desc: "Draft edits only, merge blocked (403)" },
+                      { name: "Diana Prince", email: "diana@bookworm.dev", role: "OUTSIDER", desc: "Private access blocked (403)" },
+                    ].map((u) => (
+                      <button
+                        key={u.email}
+                        onClick={() => handleRoleSwitch(u.email)}
+                        disabled={isSwitchingRole}
+                        className="w-full text-left px-3 py-2 hover:bg-zinc-800/80 flex items-start justify-between gap-2 cursor-pointer transition-colors"
                       >
-                        <div className="flex items-start justify-between gap-2">
-                          <span className="font-semibold text-zinc-200">{n.title}</span>
-                          <span className="text-[10px] text-zinc-500 shrink-0">{n.timestamp}</span>
+                        <div>
+                          <div className="font-semibold text-zinc-100 text-[11px]">{u.name}</div>
+                          <div className="text-[10px] text-zinc-400">{u.desc}</div>
                         </div>
-                        <p className="text-zinc-400 text-[11px] mt-0.5 leading-relaxed">{n.description}</p>
-                      </div>
+                        <span className="px-1.5 py-0.5 rounded text-[9px] font-mono bg-zinc-800 text-purple-300 border border-zinc-700 shrink-0">
+                          {u.role.split(' ')[0]}
+                        </span>
+                      </button>
                     ))}
                   </div>
 
-                  <div className="p-2 text-center bg-zinc-950/60 border-t border-zinc-800">
-                    <span className="text-[11px] text-zinc-500">All notifications updated</span>
+                  <div className="p-1.5">
+                    <button
+                      onClick={handleLogout}
+                      className="w-full px-3 py-1.5 rounded-lg hover:bg-red-950/30 text-red-400 hover:text-red-300 flex items-center gap-2 text-xs transition-colors cursor-pointer"
+                    >
+                      <LogOut className="w-3.5 h-3.5" />
+                      <span>Sign Out</span>
+                    </button>
                   </div>
                 </div>
               </>
             )}
           </div>
+
+          {/* Apple Light / Dark Mode Theme Toggle */}
+          <ThemeToggle />
+
+          {/* Notifications Dropdown */}
+          <NotificationsDropdown userId={userId} />
         </div>
       </div>
+
+      {/* Role Auditor Modal */}
+      <RoleAuditorModal
+        isOpen={isAuditorOpen}
+        onClose={() => setIsAuditorOpen(false)}
+        currentUser={currentUser}
+      />
     </header>
   );
 }

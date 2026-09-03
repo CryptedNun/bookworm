@@ -14,18 +14,53 @@ import {
   CheckCircle2,
   X as XIcon,
   GitBranch,
+  Users,
+  Settings,
 } from 'lucide-react';
 import { createNote, updateNoteOrder, deleteNote } from '@/actions/notes';
 import type { Notebook } from '@/actions/notebooks';
 import type { Note } from '@/actions/notes';
+import PermissionsManager from '@/components/permissions/PermissionsManager';
+
+interface Collaborator {
+  role_id: string;
+  user_id: string;
+  role_type: 'OWNER' | 'MAINTAINER' | 'CONTRIBUTOR';
+  username: string;
+  email: string;
+  avatar_url: string | null;
+  created_at: string; // ISO string from server
+}
+
+interface AccessRequest {
+  request_id: string;
+  user_id: string;
+  requested_role: string;
+  message?: string;
+  username: string;
+  email: string;
+  avatar_url: string | null;
+  created_at: string; // ISO string from server
+}
 
 interface NotebookManageClientProps {
   notebook: Notebook;
   notes: Note[];
   userId: string;
+  userRole?: 'OWNER' | 'MAINTAINER' | 'CONTRIBUTOR';
+  collaborators: Collaborator[];
+  accessRequests: AccessRequest[];
 }
 
-export default function NotebookManageClient({ notebook, notes: initialNotes, userId }: NotebookManageClientProps) {
+export default function NotebookManageClient({ 
+  notebook, 
+  notes: initialNotes, 
+  userId,
+  userRole = 'CONTRIBUTOR',
+  collaborators,
+  accessRequests,
+}: NotebookManageClientProps) {
+  const [activeTab, setActiveTab] = useState<'notes' | 'permissions'>('notes');
   const [notes, setNotes] = useState(initialNotes);
   const [draggedNote, setDraggedNote] = useState<string | null>(null);
   const [showCreateModal, setShowCreateModal] = useState(false);
@@ -204,109 +239,154 @@ export default function NotebookManageClient({ notebook, notes: initialNotes, us
           </div>
         )}
 
-        {/* Notes List */}
-        <div className="space-y-3">
-          <div className="flex items-center justify-between mb-4">
-            <h2 className="text-sm font-bold uppercase tracking-wider text-zinc-400">
-              Notes in this Notebook
-            </h2>
-            {canEdit && (
-              <p className="text-xs text-zinc-500">
-                Drag to reorder notes
-              </p>
+        {/* Tabs Navigation */}
+        <div className="flex gap-2 mb-6 border-b border-zinc-800">
+          <button
+            onClick={() => setActiveTab('notes')}
+            className={`px-4 py-3 text-sm font-medium transition-colors flex items-center gap-2 border-b-2 ${
+              activeTab === 'notes'
+                ? 'text-emerald-400 border-emerald-500'
+                : 'text-zinc-400 hover:text-zinc-300 border-transparent'
+            }`}
+          >
+            <FileText className="w-4 h-4" />
+            Notes ({notes.length})
+          </button>
+          
+          <button
+            onClick={() => setActiveTab('permissions')}
+            className={`px-4 py-3 text-sm font-medium transition-colors flex items-center gap-2 border-b-2 ${
+              activeTab === 'permissions'
+                ? 'text-emerald-400 border-emerald-500'
+                : 'text-zinc-400 hover:text-zinc-300 border-transparent'
+            }`}
+          >
+            <Users className="w-4 h-4" />
+            Permissions ({collaborators.length})
+            {accessRequests.length > 0 && (
+              <span className="px-1.5 py-0.5 text-xs font-bold rounded-full bg-emerald-500 text-zinc-950">
+                {accessRequests.length}
+              </span>
             )}
-          </div>
+          </button>
+        </div>
 
-          {notes.length === 0 ? (
-            <div className="text-center py-12 px-4 rounded-xl bg-zinc-900/30 border border-zinc-800/50 border-dashed">
-              <FileText className="w-12 h-12 text-zinc-700 mx-auto mb-3" />
-              <p className="text-sm text-zinc-400 mb-4">This notebook doesn't have any notes yet.</p>
+        {/* Tab Content */}
+        {activeTab === 'notes' && (
+          <div className="space-y-3">
+            <div className="flex items-center justify-between mb-4">
+              <h2 className="text-sm font-bold uppercase tracking-wider text-zinc-400">
+                Notes in this Notebook
+              </h2>
               {canEdit && (
-                <button
-                  onClick={() => setShowCreateModal(true)}
-                  className="px-4 py-2 rounded-lg bg-emerald-500/10 hover:bg-emerald-500/20 text-emerald-400 text-sm font-medium transition-colors inline-flex items-center gap-2"
-                >
-                  <Plus className="w-4 h-4" />
-                  Create your first note
-                </button>
+                <p className="text-xs text-zinc-500">
+                  Drag to reorder notes
+                </p>
               )}
             </div>
-          ) : (
-            notes.map((note, index) => (
-              <div
-                key={note.note_id}
-                draggable={canEdit}
-                onDragStart={() => handleDragStart(note.note_id)}
-                onDragOver={(e) => handleDragOver(e, note.note_id)}
-                onDragEnd={handleDragEnd}
-                className={`group flex items-center gap-4 p-4 rounded-xl border transition-all ${
-                  draggedNote === note.note_id
-                    ? 'bg-zinc-800 border-emerald-500/50 opacity-50'
-                    : 'bg-zinc-900/50 border-zinc-800 hover:border-zinc-700 hover:bg-zinc-900'
-                }`}
-              >
+
+            {notes.length === 0 ? (
+              <div className="text-center py-12 px-4 rounded-xl bg-zinc-900/30 border border-zinc-800/50 border-dashed">
+                <FileText className="w-12 h-12 text-zinc-700 mx-auto mb-3" />
+                <p className="text-sm text-zinc-400 mb-4">This notebook doesn't have any notes yet.</p>
                 {canEdit && (
                   <button
-                    className="cursor-grab active:cursor-grabbing p-1 text-zinc-600 hover:text-zinc-400"
-                    aria-label="Drag to reorder"
+                    onClick={() => setShowCreateModal(true)}
+                    className="px-4 py-2 rounded-lg bg-emerald-500/10 hover:bg-emerald-500/20 text-emerald-400 text-sm font-medium transition-colors inline-flex items-center gap-2"
                   >
-                    <GripVertical className="w-5 h-5" />
+                    <Plus className="w-4 h-4" />
+                    Create your first note
                   </button>
                 )}
-
-                <div className="flex-1 min-w-0">
-                  <div className="flex items-center gap-2 mb-1">
-                    <span className="text-xs font-mono text-zinc-500">#{index + 1}</span>
-                    <h3 className="text-sm font-semibold text-zinc-100 truncate">
-                      {note.title}
-                    </h3>
-                  </div>
-                  <p className="text-xs text-zinc-500">
-                    Updated {new Date(note.updated_at).toLocaleDateString()}
-                  </p>
-                </div>
-
-                <div className="flex items-center gap-2 opacity-0 group-hover:opacity-100 transition-opacity">
-                  <Link
-                    href={`/dashboard/notebooks/${notebook.notebook_id}/notes/${note.note_id}`}
-                    className="p-2 rounded-lg bg-zinc-800 hover:bg-zinc-700 text-zinc-300 transition-colors"
-                    title="View note"
-                  >
-                    <Eye className="w-4 h-4" />
-                  </Link>
-
-                  <Link
-                    href={`/dashboard/notebooks/${notebook.notebook_id}/notes/${note.note_id}/tree`}
-                    className="p-2 rounded-lg bg-zinc-800 hover:bg-zinc-700 text-blue-400 transition-colors"
-                    title="View commit tree"
-                  >
-                    <GitBranch className="w-4 h-4" />
-                  </Link>
-
-                  {canEdit && (
-                    <>
-                      <Link
-                        href={`/dashboard/notebooks/${notebook.notebook_id}/notes/${note.note_id}/edit`}
-                        className="p-2 rounded-lg bg-zinc-800 hover:bg-zinc-700 text-zinc-300 transition-colors"
-                        title="Edit note"
-                      >
-                        <Edit className="w-4 h-4" />
-                      </Link>
-
-                      <button
-                        onClick={() => handleDeleteNote(note.note_id)}
-                        className="p-2 rounded-lg bg-zinc-800 hover:bg-red-900 text-zinc-300 hover:text-red-400 transition-colors"
-                        title="Delete note"
-                      >
-                        <Trash2 className="w-4 h-4" />
-                      </button>
-                    </>
-                  )}
-                </div>
               </div>
-            ))
-          )}
-        </div>
+            ) : (
+              notes.map((note, index) => (
+                <div
+                  key={note.note_id}
+                  draggable={canEdit}
+                  onDragStart={() => handleDragStart(note.note_id)}
+                  onDragOver={(e) => handleDragOver(e, note.note_id)}
+                  onDragEnd={handleDragEnd}
+                  className={`group flex items-center gap-4 p-4 rounded-xl border transition-all ${
+                    draggedNote === note.note_id
+                      ? 'bg-zinc-800 border-emerald-500/50 opacity-50'
+                      : 'bg-zinc-900/50 border-zinc-800 hover:border-zinc-700 hover:bg-zinc-900'
+                  }`}
+                >
+                  {canEdit && (
+                    <button
+                      className="cursor-grab active:cursor-grabbing p-1 text-zinc-600 hover:text-zinc-400"
+                      aria-label="Drag to reorder"
+                    >
+                      <GripVertical className="w-5 h-5" />
+                    </button>
+                  )}
+
+                  <div className="flex-1 min-w-0">
+                    <div className="flex items-center gap-2 mb-1">
+                      <span className="text-xs font-mono text-zinc-500">#{index + 1}</span>
+                      <h3 className="text-sm font-semibold text-zinc-100 truncate">
+                        {note.title}
+                      </h3>
+                    </div>
+                    <p className="text-xs text-zinc-500">
+                      Updated {new Date(note.created_at).toLocaleDateString()}
+                    </p>
+                  </div>
+
+                  <div className="flex items-center gap-2 opacity-0 group-hover:opacity-100 transition-opacity">
+                    <Link
+                      href={`/dashboard/notebooks/${notebook.notebook_id}/notes/${note.note_id}`}
+                      className="p-2 rounded-lg bg-zinc-800 hover:bg-zinc-700 text-zinc-300 transition-colors"
+                      title="View note"
+                    >
+                      <Eye className="w-4 h-4" />
+                    </Link>
+
+                    <Link
+                      href={`/dashboard/notebooks/${notebook.notebook_id}/notes/${note.note_id}/tree`}
+                      className="p-2 rounded-lg bg-zinc-800 hover:bg-zinc-700 text-blue-400 transition-colors"
+                      title="View commit tree"
+                    >
+                      <GitBranch className="w-4 h-4" />
+                    </Link>
+
+                    {canEdit && (
+                      <>
+                        <Link
+                          href={`/dashboard/notebooks/${notebook.notebook_id}/notes/${note.note_id}/edit`}
+                          className="p-2 rounded-lg bg-zinc-800 hover:bg-zinc-700 text-zinc-300 transition-colors"
+                          title="Edit note"
+                        >
+                          <Edit className="w-4 h-4" />
+                        </Link>
+
+                        <button
+                          onClick={() => handleDeleteNote(note.note_id)}
+                          className="p-2 rounded-lg bg-zinc-800 hover:bg-red-900 text-zinc-300 hover:text-red-400 transition-colors"
+                          title="Delete note"
+                        >
+                          <Trash2 className="w-4 h-4" />
+                        </button>
+                      </>
+                    )}
+                  </div>
+                </div>
+              ))
+            )}
+          </div>
+        )}
+
+        {activeTab === 'permissions' && (
+          <PermissionsManager
+            resourceId={notebook.notebook_id}
+            resourceType="NOTEBOOK"
+            currentUserId={userId}
+            currentUserRole={userRole}
+            initialCollaborators={collaborators}
+            initialAccessRequests={accessRequests}
+          />
+        )}
       </div>
 
       {/* Create Note Modal */}

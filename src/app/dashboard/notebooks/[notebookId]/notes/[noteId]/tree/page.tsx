@@ -7,7 +7,9 @@
 
 import { getCurrentUser } from '@/actions/auth';
 import { getNote } from '@/actions/notes';
+import type { Note } from '@/actions/notes';
 import { getBranches } from '@/actions/branches';
+import type { BranchWithCommits } from '@/actions/branches';
 import { redirect } from 'next/navigation';
 import TreeClient from './tree-client';
 
@@ -40,8 +42,8 @@ export default async function TreePage({ params }: PageProps) {
 
   return (
     <TreeClient
-      note={noteResult.note}
-      branches={branchesResult.branches || []}
+      note={noteResult.note as Note}
+      branches={(branchesResult.branches || []) as BranchWithCommits[]}
       notebookId={notebookId}
       user={user}
     />

@@ -27,9 +27,11 @@ export interface BranchWithCommits extends Branch {
   commits: Array<{
     commit_id: string;
     commit_message: string;
+    commit_hash?: string;
     author_username: string;
     created_at: string;
     parent_commit_id: string | null;
+    merge_parent_commit_id?: string | null;
   }>;
 }
 
@@ -45,10 +47,20 @@ export async function getBranches(noteId: string, includeCommits = false) {
   try {
     // Check if user has access to this note
     const [access] = await sql`
-      SELECT cr.role_type
-      FROM collaborator_roles cr
-      WHERE cr.resource_id = ${noteId}
-      AND cr.user_id = ${user.user_id}
+      SELECT 1
+      FROM notes n
+      JOIN notebooks nb ON nb.notebook_id = n.notebook_id
+      WHERE n.note_id = ${noteId}
+        AND (
+          nb.owner_id = ${user.user_id}
+          OR n.visibility = 'PUBLIC'
+          OR nb.visibility = 'PUBLIC'
+          OR EXISTS (
+            SELECT 1 FROM collaborator_roles cr 
+            WHERE (cr.resource_id = n.note_id OR cr.resource_id = n.notebook_id)
+              AND cr.user_id = ${user.user_id}
+          )
+        )
     `;
 
     if (!access) {
@@ -67,7 +79,7 @@ export async function getBranches(noteId: string, includeCommits = false) {
         b.is_merged,
         b.selected_by,
         b.selected_at,
-        first_c.created_at as created_at,
+        b.created_at as created_at,
         c.commit_id as latest_commit_id,
         c.commit_message as latest_commit_message,
         u.username as latest_commit_author,
@@ -79,13 +91,6 @@ export async function getBranches(noteId: string, includeCommits = false) {
         ) as commit_count
       FROM branches b
       LEFT JOIN LATERAL (
-        SELECT created_at
-        FROM commits
-        WHERE branch_id = b.branch_id
-        ORDER BY created_at ASC
-        LIMIT 1
-      ) first_c ON TRUE
-      LEFT JOIN LATERAL (
         SELECT commit_id, commit_message, author_id, created_at
         FROM commits
         WHERE branch_id = b.branch_id
@@ -94,7 +99,7 @@ export async function getBranches(noteId: string, includeCommits = false) {
       ) c ON TRUE
       LEFT JOIN users u ON u.user_id = c.author_id
       WHERE b.note_id = ${noteId}
-      ORDER BY b.is_main DESC, first_c.created_at DESC
+      ORDER BY b.is_main DESC, b.created_at DESC
     `;
 
     if (includeCommits) {
@@ -106,6 +111,8 @@ export async function getBranches(noteId: string, includeCommits = false) {
           SELECT 
             c.commit_id,
             c.commit_message,
+            c.commit_hash,
+            c.merge_parent_commit_id,
             u.username as author_username,
             c.created_at,
             c.parent_commit_id
@@ -165,12 +172,16 @@ export async function mergeBranch({
         b.is_main,
         b.is_merged,
         b.issue_id,
-        cr.role_type
+        n.notebook_id,
+        COALESCE(
+          (SELECT cr_note.role_type FROM collaborator_roles cr_note WHERE cr_note.resource_id = b.note_id AND cr_note.user_id = ${user.user_id} LIMIT 1),
+          (SELECT cr_nb.role_type FROM collaborator_roles cr_nb WHERE cr_nb.resource_id = n.notebook_id AND cr_nb.user_id = ${user.user_id} LIMIT 1),
+          CASE WHEN nb.owner_id = ${user.user_id} THEN 'OWNER' ELSE 'CONTRIBUTOR' END
+        ) as role_type
       FROM branches b
       JOIN notes n ON n.note_id = b.note_id
-      JOIN collaborator_roles cr ON cr.resource_id = b.note_id
+      JOIN notebooks nb ON nb.notebook_id = n.notebook_id
       WHERE b.branch_id = ${branchId}
-      AND cr.user_id = ${user.user_id}
     `;
 
     if (!branch) {
@@ -350,14 +361,16 @@ export async function mergeBranch({
           author_id,
           commit_message,
           commit_hash,
-          parent_commit_id
+          parent_commit_id,
+          merge_parent_commit_id
         )
         VALUES (
           ${mainBranch.branch_id},
           ${user.user_id},
           ${mergeMessage || `Merge branch '${branch.branch_name}' into main`},
           ${commitHash},
-          ${mainCommit.commit_id}
+          ${mainCommit.commit_id},
+          ${sourceCommit.commit_id}
         )
         RETURNING commit_id, created_at
       `;
@@ -505,10 +518,20 @@ export async function compareBranches({
   try {
     // Check access
     const [access] = await sql`
-      SELECT cr.role_type
-      FROM collaborator_roles cr
-      WHERE cr.resource_id = ${noteId}
-      AND cr.user_id = ${user.user_id}
+      SELECT 1
+      FROM notes n
+      JOIN notebooks nb ON nb.notebook_id = n.notebook_id
+      WHERE n.note_id = ${noteId}
+        AND (
+          nb.owner_id = ${user.user_id}
+          OR n.visibility = 'PUBLIC'
+          OR nb.visibility = 'PUBLIC'
+          OR EXISTS (
+            SELECT 1 FROM collaborator_roles cr 
+            WHERE (cr.resource_id = n.note_id OR cr.resource_id = n.notebook_id)
+              AND cr.user_id = ${user.user_id}
+          )
+        )
     `;
 
     if (!access) {
@@ -563,30 +586,30 @@ export async function compareBranches({
       SELECT 
         cm.slot_id,
         cm.version_id,
-        bv.block_type,
+        lbs.block_type,
         cb.content_text,
-        cs.lexorank_key
+        lbs.lexorank_key
       FROM commit_manifests cm
-      JOIN block_versions bv ON bv.version_id = cm.version_id
-      JOIN content_blobs cb ON cb.sha256 = bv.content_sha256
-      JOIN content_slots cs ON cs.slot_id = cm.slot_id
+      JOIN block_version_contents bvc ON bvc.version_id = cm.version_id
+      JOIN content_blobs cb ON cb.sha256 = bvc.content_blob_hash
+      JOIN logical_block_slots lbs ON lbs.slot_id = cm.slot_id
       WHERE cm.commit_id = ${sourceCommit.commit_id}
-      ORDER BY cs.lexorank_key
+      ORDER BY lbs.lexorank_key
     `;
 
     const targetManifest = await sql`
       SELECT 
         cm.slot_id,
         cm.version_id,
-        bv.block_type,
+        lbs.block_type,
         cb.content_text,
-        cs.lexorank_key
+        lbs.lexorank_key
       FROM commit_manifests cm
-      JOIN block_versions bv ON bv.version_id = cm.version_id
-      JOIN content_blobs cb ON cb.sha256 = bv.content_sha256
-      JOIN content_slots cs ON cs.slot_id = cm.slot_id
+      JOIN block_version_contents bvc ON bvc.version_id = cm.version_id
+      JOIN content_blobs cb ON cb.sha256 = bvc.content_blob_hash
+      JOIN logical_block_slots lbs ON lbs.slot_id = cm.slot_id
       WHERE cm.commit_id = ${targetCommit.commit_id}
-      ORDER BY cs.lexorank_key
+      ORDER BY lbs.lexorank_key
     `;
 
     // Build maps
@@ -664,5 +687,36 @@ export async function compareBranches({
   } catch (error: any) {
     console.error('Error comparing branches:', error);
     return { success: false, error: error.message };
+  }
+}
+
+/**
+ * Get full block snapshot and CAS hashes for a specific commit
+ */
+export async function getCommitSnapshot(commitId: string) {
+  try {
+    const blocks = await sql`
+      SELECT 
+        cm.slot_id,
+        cm.version_id,
+        lbs.block_type,
+        lbs.lexorank_key,
+        cb.content_text,
+        cb.sha256,
+        bvc.created_at,
+        COALESCE(u.username, 'Author') as author_username
+      FROM commit_manifests cm
+      JOIN block_version_contents bvc ON bvc.version_id = cm.version_id
+      JOIN content_blobs cb ON cb.sha256 = bvc.content_blob_hash
+      JOIN logical_block_slots lbs ON lbs.slot_id = cm.slot_id
+      LEFT JOIN users u ON u.user_id = bvc.author_id
+      WHERE cm.commit_id = ${commitId}
+      ORDER BY lbs.lexorank_key ASC
+    `;
+
+    return { success: true, blocks: blocks as any[] };
+  } catch (error: any) {
+    console.error('Error fetching commit snapshot:', error);
+    return { success: false, error: error.message || 'Failed to fetch commit snapshot' };
   }
 }

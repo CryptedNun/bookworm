@@ -6,8 +6,11 @@
 
 import { getCurrentUserWithStats } from '@/actions/auth';
 import { getUserNotebooks } from '@/actions/notebooks';
+import { getDashboardOverview } from '@/actions/dashboard';
 import { redirect } from 'next/navigation';
 import DashboardClient from './dashboard-client';
+
+export const dynamic = 'force-dynamic';
 
 export default async function DashboardPage() {
   // Fetch current user with stats (Server Component - direct DB query)
@@ -22,6 +25,24 @@ export default async function DashboardPage() {
   const notebooksResult = await getUserNotebooks();
   const notebooks = notebooksResult.success ? notebooksResult.notebooks || [] : [];
 
-  // Pass real user data and notebooks to client component
-  return <DashboardClient user={user} notebooks={notebooks} />;
+  // Fetch dashboard overview (unmerged branches, notes in notebooks, roles, analytics, activities)
+  const overviewResult = await getDashboardOverview();
+  const unmergedBranches = overviewResult.unmergedBranches || [];
+  const dashboardNotes = overviewResult.notes || [];
+  const userRoles = overviewResult.roles || [];
+  const analytics = overviewResult.analytics;
+  const activities = overviewResult.activities || [];
+
+  // Pass real user data, notebooks, and overview to client component
+  return (
+    <DashboardClient 
+      user={user} 
+      notebooks={notebooks} 
+      unmergedBranches={unmergedBranches}
+      dashboardNotes={dashboardNotes}
+      userRoles={userRoles}
+      analytics={analytics}
+      activities={activities}
+    />
+  );
 }

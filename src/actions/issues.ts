@@ -53,16 +53,34 @@ export async function createIssue({
   }
 
   try {
-    // Check if user has access to this note
-    const [access] = await sql`
-      SELECT cr.role_type
-      FROM collaborator_roles cr
-      WHERE cr.resource_id = ${noteId}
-      AND cr.user_id = ${user.user_id}
+    // Check if user has access to this note and resolve role
+    const [noteAccess] = await sql`
+      SELECT 
+        n.notebook_id,
+        nb.owner_id,
+        n.visibility as note_visibility,
+        nb.visibility as notebook_visibility,
+        COALESCE(
+          (SELECT cr_note.role_type FROM collaborator_roles cr_note WHERE cr_note.resource_id = n.note_id AND cr_note.user_id = ${user.user_id} LIMIT 1),
+          (SELECT cr_nb.role_type FROM collaborator_roles cr_nb WHERE cr_nb.resource_id = n.notebook_id AND cr_nb.user_id = ${user.user_id} LIMIT 1),
+          CASE WHEN nb.owner_id = ${user.user_id} THEN 'OWNER' ELSE NULL END
+        ) as role_type
+      FROM notes n
+      JOIN notebooks nb ON nb.notebook_id = n.notebook_id
+      WHERE n.note_id = ${noteId} AND n.deleted_at IS NULL
     `;
 
-    if (!access) {
-      return { success: false, error: 'Access denied' };
+    if (!noteAccess) {
+      return { success: false, error: 'Note not found' };
+    }
+
+    const effectiveRole = noteAccess.role_type;
+    // Issue creation requires CONTRIBUTOR, MAINTAINER, or OWNER
+    if (!['OWNER', 'MAINTAINER', 'CONTRIBUTOR'].includes(effectiveRole)) {
+      return { 
+        success: false, 
+        error: 'Insufficient permissions. You must be a Contributor, Maintainer, or Owner to create an issue on this note.' 
+      };
     }
 
     // Validate title
@@ -73,7 +91,7 @@ export async function createIssue({
     // Check if slot exists and belongs to this note
     const [slot] = await sql`
       SELECT slot_id, note_id, block_type
-      FROM content_slots
+      FROM logical_block_slots
       WHERE slot_id = ${slotId}
       AND note_id = ${noteId}
     `;
@@ -241,10 +259,20 @@ export async function getIssues(noteId: string, includeResolved = false) {
   try {
     // Check access
     const [access] = await sql`
-      SELECT cr.role_type
-      FROM collaborator_roles cr
-      WHERE cr.resource_id = ${noteId}
-      AND cr.user_id = ${user.user_id}
+      SELECT 1
+      FROM notes n
+      JOIN notebooks nb ON nb.notebook_id = n.notebook_id
+      WHERE n.note_id = ${noteId}
+        AND (
+          nb.owner_id = ${user.user_id}
+          OR n.visibility = 'PUBLIC'
+          OR nb.visibility = 'PUBLIC'
+          OR EXISTS (
+            SELECT 1 FROM collaborator_roles cr 
+            WHERE (cr.resource_id = n.note_id OR cr.resource_id = n.notebook_id)
+              AND cr.user_id = ${user.user_id}
+          )
+        )
     `;
 
     if (!access) {
@@ -267,7 +295,7 @@ export async function getIssues(noteId: string, includeResolved = false) {
         i.status,
         i.created_at,
         u.username as creator_username,
-        cs.block_type as target_block_type,
+        lbs.block_type as target_block_type,
         cb.content_text as target_block_content,
         (
           SELECT COUNT(*)
@@ -276,15 +304,15 @@ export async function getIssues(noteId: string, includeResolved = false) {
         ) as branch_count
       FROM issues i
       JOIN users u ON u.user_id = i.creator_id
-      JOIN content_slots cs ON cs.slot_id = i.target_slot_id
+      JOIN logical_block_slots lbs ON lbs.slot_id = i.target_slot_id
       LEFT JOIN LATERAL (
-        SELECT bv.content_sha256
-        FROM block_versions bv
-        WHERE bv.slot_id = i.target_slot_id
-        ORDER BY bv.created_at DESC
+        SELECT bvc.content_blob_hash
+        FROM block_version_contents bvc
+        WHERE bvc.slot_id = i.target_slot_id
+        ORDER BY bvc.created_at DESC
         LIMIT 1
       ) latest_version ON TRUE
-      LEFT JOIN content_blobs cb ON cb.sha256 = latest_version.content_sha256
+      LEFT JOIN content_blobs cb ON cb.sha256 = latest_version.content_blob_hash
       WHERE i.note_id = ${noteId}
       AND ${statusFilter}
       ORDER BY 
@@ -325,19 +353,19 @@ export async function getIssueDetail(issueId: string) {
         i.status,
         i.created_at,
         u.username as creator_username,
-        cs.block_type as target_block_type,
+        lbs.block_type as target_block_type,
         cb.content_text as target_block_content
       FROM issues i
       JOIN users u ON u.user_id = i.creator_id
-      JOIN content_slots cs ON cs.slot_id = i.target_slot_id
+      JOIN logical_block_slots lbs ON lbs.slot_id = i.target_slot_id
       LEFT JOIN LATERAL (
-        SELECT bv.content_sha256
-        FROM block_versions bv
-        WHERE bv.slot_id = i.target_slot_id
-        ORDER BY bv.created_at DESC
+        SELECT bvc.content_blob_hash
+        FROM block_version_contents bvc
+        WHERE bvc.slot_id = i.target_slot_id
+        ORDER BY bvc.created_at DESC
         LIMIT 1
       ) latest_version ON TRUE
-      LEFT JOIN content_blobs cb ON cb.sha256 = latest_version.content_sha256
+      LEFT JOIN content_blobs cb ON cb.sha256 = latest_version.content_blob_hash
       WHERE i.issue_id = ${issueId}
     `;
 
@@ -347,10 +375,20 @@ export async function getIssueDetail(issueId: string) {
 
     // Check user has access to the note
     const [access] = await sql`
-      SELECT cr.role_type
-      FROM collaborator_roles cr
-      WHERE cr.resource_id = ${issue.note_id}
-      AND cr.user_id = ${user.user_id}
+      SELECT 1
+      FROM notes n
+      JOIN notebooks nb ON nb.notebook_id = n.notebook_id
+      WHERE n.note_id = ${issue.note_id}
+        AND (
+          nb.owner_id = ${user.user_id}
+          OR n.visibility = 'PUBLIC'
+          OR nb.visibility = 'PUBLIC'
+          OR EXISTS (
+            SELECT 1 FROM collaborator_roles cr 
+            WHERE (cr.resource_id = n.note_id OR cr.resource_id = n.notebook_id)
+              AND cr.user_id = ${user.user_id}
+          )
+        )
     `;
 
     if (!access) {
@@ -622,5 +660,191 @@ export async function assignContributor({
   } catch (error: any) {
     console.error('Error assigning contributor:', error);
     return { success: false, error: error.message };
+  }
+}
+
+/**
+ * Self-assign / Contribute to an open or in-progress issue
+ * Creates or retrieves the user's attempt branch and returns the branchId
+ */
+export async function contributeToIssue(issueId: string) {
+  const user = await getCurrentUser();
+  if (!user) {
+    return { success: false, error: 'Unauthorized' };
+  }
+
+  try {
+    // 1. Get issue details and check access
+    const [issue] = await sql`
+      SELECT 
+        i.issue_id,
+        i.note_id,
+        i.title,
+        i.status,
+        i.target_slot_id,
+        n.notebook_id,
+        COALESCE(
+          (SELECT cr_note.role_type FROM collaborator_roles cr_note WHERE cr_note.resource_id = i.note_id AND cr_note.user_id = ${user.user_id} LIMIT 1),
+          (SELECT cr_nb.role_type FROM collaborator_roles cr_nb WHERE cr_nb.resource_id = n.notebook_id AND cr_nb.user_id = ${user.user_id} LIMIT 1),
+          CASE WHEN nb.owner_id = ${user.user_id} THEN 'OWNER' ELSE NULL END
+        ) as role_type
+      FROM issues i
+      JOIN notes n ON n.note_id = i.note_id
+      JOIN notebooks nb ON nb.notebook_id = n.notebook_id
+      WHERE i.issue_id = ${issueId}
+        AND (
+          nb.owner_id = ${user.user_id}
+          OR n.visibility = 'PUBLIC'
+          OR nb.visibility = 'PUBLIC'
+          OR EXISTS (
+            SELECT 1 FROM collaborator_roles cr 
+            WHERE (cr.resource_id = i.note_id OR cr.resource_id = n.notebook_id)
+              AND cr.user_id = ${user.user_id}
+          )
+        )
+    `;
+
+    if (!issue) {
+      return { success: false, error: 'Issue not found or access denied' };
+    }
+
+    if (!['OPEN', 'IN_PROGRESS'].includes(issue.status)) {
+      return { success: false, error: 'This issue is already resolved or closed' };
+    }
+
+    // Role check: must have at least CONTRIBUTOR role
+    if (!['OWNER', 'MAINTAINER', 'CONTRIBUTOR'].includes(issue.role_type)) {
+      return { 
+        success: false, 
+        error: 'You need Contributor, Maintainer, or Owner access to work on this issue.' 
+      };
+    }
+
+    // 2. Check if user already has an attempt branch for this issue
+    const [existingBranch] = await sql`
+      SELECT branch_id, branch_name
+      FROM branches
+      WHERE issue_id = ${issueId}
+      AND attempted_by = ${user.user_id}
+      AND is_merged = FALSE
+    `;
+
+    if (existingBranch) {
+      return { 
+        success: true, 
+        branchId: existingBranch.branch_id,
+        branchName: existingBranch.branch_name,
+        alreadyExisted: true,
+      };
+    }
+
+    // 3. Get main branch latest commit
+    const [mainBranch] = await sql`
+      SELECT branch_id
+      FROM branches
+      WHERE note_id = ${issue.note_id}
+      AND is_main = TRUE
+    `;
+
+    if (!mainBranch) {
+      return { success: false, error: 'Note has no canonical main branch' };
+    }
+
+    const [latestCommit] = await sql`
+      SELECT commit_id
+      FROM commits
+      WHERE branch_id = ${mainBranch.branch_id}
+      ORDER BY created_at DESC
+      LIMIT 1
+    `;
+
+    if (!latestCommit) {
+      return { success: false, error: 'Main branch has no commits' };
+    }
+
+    // 4. Create attempt branch for this user
+    const branchSlug = `issue-${issue.issue_id.substring(0, 8)}/${user.username}`;
+    const [branch] = await sql`
+      INSERT INTO branches (
+        note_id,
+        issue_id,
+        attempted_by,
+        branch_name,
+        is_main
+      )
+      VALUES (
+        ${issue.note_id},
+        ${issue.issue_id},
+        ${user.user_id},
+        ${branchSlug},
+        FALSE
+      )
+      RETURNING branch_id, branch_name
+    `;
+
+    // 5. Create initial commit on attempt branch
+    const commitHash = createHash('sha256')
+      .update(JSON.stringify({
+        branch_id: branch.branch_id,
+        parent_commit_id: latestCommit.commit_id,
+        author_id: user.user_id,
+        issue_id: issue.issue_id,
+        timestamp: Date.now(),
+      }))
+      .digest('hex');
+
+    const [commit] = await sql`
+      INSERT INTO commits (
+        branch_id,
+        author_id,
+        commit_message,
+        commit_hash,
+        parent_commit_id
+      )
+      VALUES (
+        ${branch.branch_id},
+        ${user.user_id},
+        ${`Attempt fix for Issue #${issue.issue_id.substring(0, 8)}: ${issue.title}`},
+        ${commitHash},
+        ${latestCommit.commit_id}
+      )
+      RETURNING commit_id
+    `;
+
+    // 6. Copy commit manifests from main commit
+    await sql`
+      INSERT INTO commit_manifests (commit_id, slot_id, version_id)
+      SELECT ${commit.commit_id}, slot_id, version_id
+      FROM commit_manifests
+      WHERE commit_id = ${latestCommit.commit_id}
+    `;
+
+    // 7. Record contributor in issue_contributors
+    await sql`
+      INSERT INTO issue_contributors (issue_id, contributor_id)
+      VALUES (${issue.issue_id}, ${user.user_id})
+      ON CONFLICT DO NOTHING
+    `;
+
+    // 8. Update issue status to IN_PROGRESS
+    await sql`
+      UPDATE issues
+      SET status = 'IN_PROGRESS'
+      WHERE issue_id = ${issue.issue_id}
+    `;
+
+    revalidatePath(`/dashboard/notebooks/[notebookId]/notes/${issue.note_id}`);
+    revalidatePath(`/dashboard/notebooks/[notebookId]/notes/${issue.note_id}/branches`);
+    revalidatePath(`/dashboard/notebooks/[notebookId]/notes/${issue.note_id}/issues`);
+
+    return {
+      success: true,
+      branchId: branch.branch_id,
+      branchName: branch.branch_name,
+      alreadyExisted: false,
+    };
+  } catch (error: any) {
+    console.error('Error contributing to issue:', error);
+    return { success: false, error: error.message || 'Failed to contribute to issue' };
   }
 }

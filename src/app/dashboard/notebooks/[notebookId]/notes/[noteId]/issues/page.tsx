@@ -1,6 +1,8 @@
 import { getCurrentUser } from '@/actions/auth';
-import { getNote } from '@/actions/notes';
+import { getNote, getNoteWithBlocks } from '@/actions/notes';
+import type { Note } from '@/actions/notes';
 import { getIssues } from '@/actions/issues';
+import type { Issue } from '@/actions/issues';
 import { redirect } from 'next/navigation';
 import IssuesClient from './issues-client';
 
@@ -9,7 +11,7 @@ interface PageProps {
     notebookId: string;
     noteId: string;
   }>;
-  searchParams: Promise<{ status?: string }>;
+  searchParams: Promise<{ status?: string; slotId?: string; action?: string }>;
 }
 
 export default async function IssuesPage({ params, searchParams }: PageProps) {
@@ -19,10 +21,10 @@ export default async function IssuesPage({ params, searchParams }: PageProps) {
   }
 
   const { notebookId, noteId } = await params;
-  const { status } = await searchParams;
+  const { status, slotId, action } = await searchParams;
 
-  // Fetch note details
-  const noteResult = await getNote(noteId);
+  // Fetch note with blocks (needed for the issue creation UI which shows blocks)
+  const noteResult = await getNoteWithBlocks(noteId);
   if (!noteResult.success || !noteResult.note) {
     redirect(`/dashboard/notebooks/${notebookId}`);
   }
@@ -37,10 +39,12 @@ export default async function IssuesPage({ params, searchParams }: PageProps) {
 
   return (
     <IssuesClient
-      note={noteResult.note}
-      issues={issuesResult.issues || []}
+      note={noteResult.note as Note & { blocks: Array<{ slot_id: string; block_type: string; content_text: string; lexorank_key: string }> }}
+      issues={(issuesResult.issues || []) as Issue[]}
       notebookId={notebookId}
       user={user}
+      initialSlotId={slotId}
+      initialOpen={action === 'new' || !!slotId}
     />
   );
 }
