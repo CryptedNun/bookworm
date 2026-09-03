@@ -6,11 +6,12 @@ import {
   BookOpen, 
   ArrowLeft, 
   FileText, 
-  GitBranch,
-  List,
-  X,
-  Edit,
+  GitBranch, 
+  List, 
+  X, 
+  Edit, 
   CircleDot,
+  Plus,
 } from 'lucide-react';
 import RobustMarkdown from '@/components/markdown/RobustMarkdown';
 import type { Notebook } from '@/actions/notebooks';
@@ -131,9 +132,13 @@ export default function NotebookReader({ notebook, notes, user }: NotebookReader
               <p className="text-sm text-zinc-500 mb-6">
                 This notebook doesn't have any notes yet.
               </p>
-              <button className="px-4 py-2 rounded-lg bg-emerald-500 hover:bg-emerald-400 text-zinc-950 font-semibold text-sm transition-colors">
-                Create First Note
-              </button>
+              <Link 
+                href={`/dashboard/notebooks/${notebook.notebook_id}/manage`}
+                className="inline-flex items-center gap-2 px-4 py-2.5 rounded-xl bg-emerald-500 hover:bg-emerald-400 text-zinc-950 font-semibold text-sm transition-all shadow-md shadow-emerald-500/20"
+              >
+                <Plus className="w-4 h-4" />
+                <span>Create First Note</span>
+              </Link>
             </div>
           ) : (
             <article className="max-w-4xl mx-auto">

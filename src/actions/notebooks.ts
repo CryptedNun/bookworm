@@ -9,6 +9,7 @@ import { revalidatePath } from 'next/cache';
 
 export interface Notebook {
   notebook_id: string;
+  owner_id?: string;
   title: string;
   description: string | null;
   visibility: 'PUBLIC' | 'PRIVATE' | 'UNLISTED' | 'SHARED';
@@ -120,6 +121,7 @@ export async function getNotebooks(userId: string): Promise<Notebook[]> {
     const notebooks = await sql`
       SELECT 
         nb.notebook_id,
+        nb.owner_id,
         nb.title,
         nb.description,
         nb.visibility,
@@ -135,7 +137,6 @@ export async function getNotebooks(userId: string): Promise<Notebook[]> {
       WHERE nb.deleted_at IS NULL
         AND (
           nb.owner_id = ${userId}
-          OR nb.visibility = 'PUBLIC'
           OR EXISTS (
             SELECT 1 FROM collaborator_roles cr 
             WHERE cr.resource_id = nb.notebook_id AND cr.user_id = ${userId}
@@ -271,35 +272,18 @@ export async function updateNotebook(
       return { success: false, error: 'Insufficient permissions' };
     }
 
-    // Build update query dynamically
-    const updateFields: string[] = [];
-    const values: any[] = [];
-
-    if (updates.title !== undefined) {
-      updateFields.push(`title = $${values.length + 1}`);
-      values.push(updates.title);
-    }
-    if (updates.description !== undefined) {
-      updateFields.push(`description = $${values.length + 1}`);
-      values.push(updates.description);
-    }
-    if (updates.visibility !== undefined) {
-      updateFields.push(`visibility = $${values.length + 1}`);
-      values.push(updates.visibility);
-    }
-
-    if (updateFields.length === 0) {
-      return { success: false, error: 'No fields to update' };
-    }
-
     await sql`
       UPDATE notebooks
-      SET ${sql.unsafe(updateFields.join(', '))}
+      SET 
+        title = CASE WHEN ${updates.title !== undefined} THEN ${updates.title} ELSE title END,
+        description = CASE WHEN ${updates.description !== undefined} THEN ${updates.description} ELSE description END,
+        visibility = CASE WHEN ${updates.visibility !== undefined} THEN ${updates.visibility}::text ELSE visibility END
       WHERE notebook_id = ${notebookId}
     `;
 
     revalidatePath('/dashboard');
     revalidatePath(`/dashboard/notebooks/${notebookId}`);
+    revalidatePath(`/dashboard/notebooks/${notebookId}/manage`);
 
     return { success: true };
   } catch (error) {

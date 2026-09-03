@@ -23,6 +23,7 @@ import {
   Check,
   Copy,
   X,
+  Mail,
   User as UserIcon,
   Shield,
   Key,
@@ -157,7 +158,7 @@ export function LeftSidebar({
 
   // Transform real notebooks with their real notes and user roles
   const notebooksWithNotes = notebooks.map(nb => {
-    const role = userRoles.find(r => r.notebook_id === nb.notebook_id)?.role_type || 'OWNER';
+    const role = userRoles.find(r => r.notebook_id === nb.notebook_id)?.role_type || nb.role_type || (nb.owner_id === user.user_id ? 'OWNER' : 'CONTRIBUTOR');
     const nbNotes = dashboardNotes.filter(n => n.notebook_id === nb.notebook_id);
     return {
       id: nb.notebook_id,
@@ -453,6 +454,9 @@ export function HomeFeed({
   analytics,
   activities = [],
   starredItems = [],
+  pendingInvitations = [],
+  onRespondInvitation,
+  isRespondingToInvite,
   onOpenCreate,
 }: {
   user: UserWithStats;
@@ -463,10 +467,61 @@ export function HomeFeed({
   analytics?: StorageAnalytics;
   activities?: ActivityItem[];
   starredItems?: StarredResourceItem[];
+  pendingInvitations?: any[];
+  onRespondInvitation?: (requestId: string, accept: boolean) => Promise<void>;
+  isRespondingToInvite?: string | null;
   onOpenCreate: (type: "notebook" | "note" | "issue" | "branch" | "fork") => void;
 }) {
   return (
     <main className="flex-1 min-w-0 p-4 lg:p-8 space-y-6 overflow-y-auto">
+      {/* 0. Pending Collaboration Invitations */}
+      {pendingInvitations && pendingInvitations.length > 0 && (
+        <div className="space-y-3">
+          {pendingInvitations.map((inv) => (
+            <div
+              key={inv.request_id}
+              className="p-4 rounded-2xl bg-gradient-to-r from-emerald-950/40 via-zinc-900 to-zinc-900 border border-emerald-500/30 flex flex-col sm:flex-row sm:items-center justify-between gap-4 shadow-xl"
+            >
+              <div className="flex items-center gap-3">
+                <div className="w-10 h-10 rounded-xl bg-emerald-500/10 border border-emerald-500/20 text-emerald-400 flex items-center justify-center shrink-0">
+                  <Mail className="w-5 h-5" />
+                </div>
+                <div>
+                  <div className="flex items-center gap-2 flex-wrap">
+                    <span className="text-xs font-bold text-zinc-100">Collaboration Invitation</span>
+                    <span className="px-2 py-0.5 rounded text-[10px] font-mono bg-purple-500/10 text-purple-300 border border-purple-500/20 uppercase font-semibold">
+                      {inv.requested_role}
+                    </span>
+                  </div>
+                  <p className="text-xs text-zinc-300 mt-0.5">
+                    <strong>@{inv.inviter_username}</strong> invited you to collaborate on{' '}
+                    <strong className="text-emerald-400">{inv.resource_title}</strong>.
+                  </p>
+                </div>
+              </div>
+
+              <div className="flex items-center gap-2 shrink-0 self-end sm:self-center">
+                <button
+                  onClick={() => onRespondInvitation && onRespondInvitation(inv.request_id, false)}
+                  disabled={isRespondingToInvite === inv.request_id}
+                  className="px-3.5 py-1.5 rounded-xl bg-zinc-800 hover:bg-zinc-700 text-zinc-300 text-xs font-semibold transition-colors cursor-pointer disabled:opacity-50"
+                >
+                  Decline
+                </button>
+                <button
+                  onClick={() => onRespondInvitation && onRespondInvitation(inv.request_id, true)}
+                  disabled={isRespondingToInvite === inv.request_id}
+                  className="px-4 py-1.5 rounded-xl bg-emerald-500 hover:bg-emerald-400 text-zinc-950 text-xs font-bold transition-all shadow-md shadow-emerald-500/20 flex items-center gap-1.5 cursor-pointer disabled:opacity-50"
+                >
+                  <Check className="w-3.5 h-3.5" />
+                  <span>Accept Invitation</span>
+                </button>
+              </div>
+            </div>
+          ))}
+        </div>
+      )}
+
       {/* 1. Welcome Hero Banner */}
       <div className="relative rounded-2xl bg-gradient-to-r from-zinc-900 via-zinc-900 to-zinc-950 border border-zinc-800 p-5 lg:p-6 overflow-hidden shadow-xl">
         <div className="absolute top-0 right-0 w-72 h-72 bg-emerald-500/8 rounded-full blur-3xl pointer-events-none" />
@@ -587,7 +642,7 @@ export function HomeFeed({
 
         <div className="grid grid-cols-1 gap-6">
           {notebooks.map((nb) => {
-            const role = userRoles.find((r) => r.notebook_id === nb.notebook_id)?.role_type || 'OWNER';
+            const role = userRoles.find((r) => r.notebook_id === nb.notebook_id)?.role_type || nb.role_type || (nb.owner_id === user.user_id ? 'OWNER' : 'CONTRIBUTOR');
             const notes = dashboardNotes.filter((n) => n.notebook_id === nb.notebook_id);
 
             return (
@@ -1587,6 +1642,7 @@ interface DashboardClientProps {
   analytics?: StorageAnalytics;
   activities?: ActivityItem[];
   starredItems?: StarredResourceItem[];
+  pendingInvitations?: any[];
 }
 
 export default function DashboardClient({ 
@@ -1598,13 +1654,43 @@ export default function DashboardClient({
   analytics,
   activities = [],
   starredItems = [],
+  pendingInvitations = [],
 }: DashboardClientProps) {
+  const router = useRouter();
   const [isProfileOpen, setIsProfileOpen] = useState(false);
   const [isCreateOpen, setIsCreateOpen] = useState(false);
   const [createType, setCreateType] = useState<"notebook" | "note" | "issue" | "branch" | "fork">("note");
   const [isForkOpen, setIsForkOpen] = useState(false);
 
+  const [invitations, setInvitations] = useState(pendingInvitations || []);
+  const [isRespondingToInvite, setIsRespondingToInvite] = useState<string | null>(null);
+
   const [toastMessage, setToastMessage] = useState<string | null>(null);
+
+  const handleRespondInvitation = async (requestId: string, accept: boolean) => {
+    setIsRespondingToInvite(requestId);
+    try {
+      const { respondToInvitation } = await import('@/actions/permissions');
+      const res = await respondToInvitation({
+        requestId,
+        accept,
+        userId: user.user_id,
+      });
+      if (res.success) {
+        setInvitations((prev) => prev.filter((i: any) => i.request_id !== requestId));
+        handleShowToast(res.message || (accept ? 'Invitation accepted!' : 'Invitation declined'));
+        if (accept) {
+          router.refresh();
+        }
+      } else {
+        handleShowToast(res.error || 'Failed to respond to invitation');
+      }
+    } catch (err: any) {
+      handleShowToast(err.message || 'Error processing invitation');
+    } finally {
+      setIsRespondingToInvite(null);
+    }
+  };
 
   const handleOpenCreate = (type: "notebook" | "note" | "issue" | "branch" | "fork") => {
     if (type === "fork") {
@@ -1670,6 +1756,9 @@ export default function DashboardClient({
           analytics={analytics}
           activities={activities}
           starredItems={starredItems}
+          pendingInvitations={invitations}
+          onRespondInvitation={handleRespondInvitation}
+          isRespondingToInvite={isRespondingToInvite}
           onOpenCreate={handleOpenCreate} 
         />
       </div>
@@ -1701,7 +1790,7 @@ export default function DashboardClient({
           userNotebooks={notebooks.map(nb => ({
             notebook_id: nb.notebook_id,
             title: nb.title,
-            role_type: userRoles.find(r => r.notebook_id === nb.notebook_id)?.role_type || 'OWNER',
+            role_type: userRoles.find(r => r.notebook_id === nb.notebook_id)?.role_type || nb.role_type || (nb.owner_id === user.user_id ? 'OWNER' : 'CONTRIBUTOR'),
           }))}
           isOpen={isForkOpen}
           onClose={() => setIsForkOpen(false)}

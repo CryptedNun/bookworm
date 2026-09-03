@@ -18,6 +18,7 @@ import {
 } from 'lucide-react';
 import type { PublicEditionData } from '@/actions/editions';
 import ForkNoteModal from '@/components/notes/ForkNoteModal';
+import RobustMarkdown from '@/components/markdown/RobustMarkdown';
 
 interface PublicEditionClientProps {
   edition: PublicEditionData;
@@ -190,65 +191,11 @@ export default function PublicEditionClient({
 
         {/* Content Blocks */}
         <article className="space-y-6 text-zinc-200 leading-relaxed font-sans text-sm sm:text-base">
-          {edition.blocks.map((block, index) => {
-            const text = block.content_text.trim();
-
-            if (text.startsWith('# ')) {
-              return (
-                <h1 key={block.slot_id} className="text-2xl font-bold text-zinc-100 pt-4 pb-1 border-b border-zinc-800/60">
-                  {text.replace(/^#\s+/, '')}
-                </h1>
-              );
-            }
-
-            if (text.startsWith('## ')) {
-              return (
-                <h2 key={block.slot_id} className="text-xl font-bold text-zinc-100 pt-3 pb-0.5">
-                  {text.replace(/^##\s+/, '')}
-                </h2>
-              );
-            }
-
-            if (text.startsWith('### ')) {
-              return (
-                <h3 key={block.slot_id} className="text-lg font-bold text-zinc-200 pt-2">
-                  {text.replace(/^###\s+/, '')}
-                </h3>
-              );
-            }
-
-            if (text.startsWith('```') && text.endsWith('```')) {
-              const codeLines = text.split('\n');
-              const language = codeLines[0].replace(/^```/, '').trim();
-              const codeContent = codeLines.slice(1, -1).join('\n');
-              return (
-                <div key={block.slot_id} className="rounded-xl overflow-hidden border border-zinc-800 bg-zinc-950 font-mono text-xs my-4 shadow-sm">
-                  {language && (
-                    <div className="px-4 py-1.5 bg-zinc-900 border-b border-zinc-800 text-[10px] text-zinc-400 uppercase tracking-wider font-semibold">
-                      {language}
-                    </div>
-                  )}
-                  <pre className="p-4 overflow-x-auto text-zinc-300 leading-relaxed">
-                    <code>{codeContent}</code>
-                  </pre>
-                </div>
-              );
-            }
-
-            if (text.startsWith('> ')) {
-              return (
-                <blockquote key={block.slot_id} className="pl-4 py-1 border-l-2 border-emerald-500 text-zinc-300 italic my-3 bg-emerald-950/10 rounded-r-lg">
-                  {text.replace(/^>\s+/, '')}
-                </blockquote>
-              );
-            }
-
-            return (
-              <p key={block.slot_id} className="leading-relaxed whitespace-pre-wrap text-zinc-300">
-                {text}
-              </p>
-            );
-          })}
+          {edition.blocks.map((block) => (
+            <div key={block.slot_id} className="prose prose-invert prose-emerald max-w-none">
+              <RobustMarkdown content={block.content_text || ''} />
+            </div>
+          ))}
         </article>
 
         {/* Article Footer */}

@@ -159,18 +159,25 @@ export async function updateBlock(data: {
       RETURNING commit_id
     ` as { commit_id: string }[];
 
-    // Copy previous manifest, updating this slot's version
+    // Copy previous manifest (all other slots), and explicitly insert this slot's new version
+    if (latestCommit?.commit_id) {
+      await sql`
+        INSERT INTO commit_manifests (commit_id, slot_id, version_id)
+        SELECT 
+          ${newCommit.commit_id},
+          cm.slot_id,
+          cm.version_id
+        FROM commit_manifests cm
+        WHERE cm.commit_id = ${latestCommit.commit_id}
+          AND cm.slot_id != ${data.slotId}
+        ON CONFLICT (commit_id, slot_id, version_id) DO NOTHING
+      `;
+    }
+
     await sql`
       INSERT INTO commit_manifests (commit_id, slot_id, version_id)
-      SELECT 
-        ${newCommit.commit_id},
-        cm.slot_id,
-        CASE 
-          WHEN cm.slot_id = ${data.slotId} THEN ${version.version_id}
-          ELSE cm.version_id
-        END
-      FROM commit_manifests cm
-      WHERE cm.commit_id = ${latestCommit.commit_id}
+      VALUES (${newCommit.commit_id}, ${data.slotId}, ${version.version_id})
+      ON CONFLICT (commit_id, slot_id, version_id) DO NOTHING
     `;
 
     revalidatePath(`/dashboard/notebooks/${data.noteId}`);
@@ -197,7 +204,15 @@ export async function insertBlock(data: {
   parentSlotId?: string | null;
   blockType: 'PARAGRAPH' | 'HEADING' | 'CODE' | 'QUOTE';
   content: string;
-}): Promise<{ success: boolean; slotId?: string; error?: string }> {
+}): Promise<{ 
+  success: boolean; 
+  slotId?: string; 
+  versionId?: string;
+  lexorankKey?: string;
+  blockType?: 'PARAGRAPH' | 'HEADING' | 'CODE' | 'QUOTE';
+  contentText?: string;
+  error?: string;
+}> {
   try {
     const user = await getCurrentUser();
     if (!user) {
@@ -319,7 +334,14 @@ export async function insertBlock(data: {
 
     revalidatePath(`/dashboard/notebooks/${data.noteId}`);
 
-    return { success: true, slotId: slot.slot_id };
+    return { 
+      success: true, 
+      slotId: slot.slot_id,
+      versionId: version.version_id,
+      lexorankKey: newLexorank,
+      blockType: data.blockType,
+      contentText: data.content,
+    };
   } catch (error: any) {
     console.error('Insert block error:', error);
     return {

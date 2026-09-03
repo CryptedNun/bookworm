@@ -23,6 +23,7 @@ import {
   getPendingAccessRequests,
   reviewAccessRequest,
   getResourceCollaborators,
+  cancelInvitation,
 } from '@/actions/permissions';
 
 interface Collaborator {
@@ -39,6 +40,7 @@ interface AccessRequest {
   request_id: string;
   user_id: string;
   requested_role: string;
+  direction?: string;
   message?: string;
   username: string;
   email: string;
@@ -146,6 +148,27 @@ export default function PermissionsManager({
       }
     } catch (err) {
       setError('An error occurred while adding collaborator');
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  // Cancel invitation
+  const handleCancelInvite = async (requestId: string) => {
+    setLoading(true);
+    setError(null);
+    setSuccess(null);
+
+    try {
+      const result = await cancelInvitation(requestId, currentUserId);
+      if (result.success) {
+        setSuccess('Invitation cancelled');
+        setAccessRequests(prev => prev.filter(r => r.request_id !== requestId));
+      } else {
+        setError(result.error || 'Failed to cancel invitation');
+      }
+    } catch (err: any) {
+      setError(err.message || 'Failed to cancel invitation');
     } finally {
       setLoading(false);
     }
@@ -506,63 +529,85 @@ export default function PermissionsManager({
               accessRequests.map((request) => (
                 <div
                   key={request.request_id}
-                  className="p-4 rounded-lg bg-zinc-800 border border-zinc-700"
+                  className="p-4 rounded-lg bg-zinc-800 border border-zinc-700 flex flex-col sm:flex-row sm:items-start justify-between gap-4"
                 >
-                  <div className="flex items-start justify-between">
-                    <div className="flex items-start gap-3">
-                      {/* Avatar */}
-                      <div className="w-10 h-10 rounded-full bg-gradient-to-br from-blue-500 to-purple-500 flex items-center justify-center text-white font-bold">
-                        {request.username[0].toUpperCase()}
-                      </div>
-
-                      <div className="flex-1">
-                        <div className="flex items-center gap-2 mb-1">
-                          <p className="text-sm font-medium text-zinc-100">
-                            {request.username}
-                          </p>
-                          <span className="text-xs text-zinc-500">requested</span>
-                          <span className={`px-2 py-0.5 rounded text-xs font-medium ${
-                            getRoleBadge(request.requested_role).className
-                          }`}>
-                            {request.requested_role}
-                          </span>
-                          <span className="text-xs text-zinc-500">access</span>
-                        </div>
-                        
-                        <p className="text-xs text-zinc-400 mb-2">{request.email}</p>
-
-                        {request.message && (
-                          <div className="p-2 rounded bg-zinc-900 border border-zinc-700 text-xs text-zinc-300 mb-3">
-                            "{request.message}"
-                          </div>
-                        )}
-
-                        <div className="flex items-center gap-1 text-xs text-zinc-500">
-                          <Clock className="w-3 h-3" />
-                          {new Date(request.created_at).toLocaleDateString()}
-                        </div>
-                      </div>
+                  <div className="flex items-start gap-3 flex-1 min-w-0">
+                    {/* Avatar */}
+                    <div className="w-10 h-10 rounded-full bg-gradient-to-br from-blue-500 to-purple-500 flex items-center justify-center text-white font-bold shrink-0">
+                      {request.username[0].toUpperCase()}
                     </div>
 
-                    {/* Action Buttons */}
-                    <div className="flex items-center gap-2">
+                    <div className="flex-1 min-w-0">
+                      <div className="flex items-center gap-2 mb-1 flex-wrap">
+                        <p className="text-sm font-medium text-zinc-100">
+                          {request.username}
+                        </p>
+                        <span className="text-xs text-zinc-500">
+                          {request.direction === 'INVITE' ? 'invited as' : 'requested'}
+                        </span>
+                        <span className={`px-2 py-0.5 rounded text-xs font-medium ${
+                          getRoleBadge(request.requested_role).className
+                        }`}>
+                          {request.requested_role}
+                        </span>
+                        {request.direction === 'INVITE' ? (
+                          <span className="text-[10px] px-2 py-0.5 rounded-full bg-amber-500/10 text-amber-300 border border-amber-500/20 font-mono">
+                            Awaiting User Acceptance
+                          </span>
+                        ) : (
+                          <span className="text-xs text-zinc-500">access</span>
+                        )}
+                      </div>
+                      
+                      <p className="text-xs text-zinc-400 mb-2">{request.email}</p>
+
+                      {request.message && (
+                        <div className="p-2 rounded bg-zinc-900 border border-zinc-700 text-xs text-zinc-300 mb-3">
+                          "{request.message}"
+                        </div>
+                      )}
+
+                      <div className="flex items-center gap-1 text-xs text-zinc-500">
+                        <Clock className="w-3 h-3" />
+                        <span>
+                          {request.direction === 'INVITE' ? 'Invited on ' : ''}
+                          {new Date(request.created_at).toLocaleDateString()}
+                        </span>
+                      </div>
+                    </div>
+                  </div>
+
+                  {/* Action Buttons */}
+                  <div className="flex items-center gap-2 shrink-0 self-end sm:self-center">
+                    {request.direction === 'INVITE' ? (
                       <button
-                        onClick={() => handleReviewRequest(request.request_id, true)}
+                        onClick={() => handleCancelInvite(request.request_id)}
                         disabled={loading}
-                        className="px-3 py-1.5 rounded-lg bg-emerald-500 hover:bg-emerald-400 text-zinc-950 text-xs font-medium transition-colors disabled:opacity-50 flex items-center gap-1"
-                      >
-                        <Check className="w-3 h-3" />
-                        Approve
-                      </button>
-                      <button
-                        onClick={() => handleReviewRequest(request.request_id, false)}
-                        disabled={loading}
-                        className="px-3 py-1.5 rounded-lg bg-red-500/10 hover:bg-red-500/20 text-red-400 text-xs font-medium transition-colors disabled:opacity-50 flex items-center gap-1"
+                        className="px-3 py-1.5 rounded-lg bg-red-500/10 hover:bg-red-500/20 text-red-400 text-xs font-medium transition-colors disabled:opacity-50 flex items-center gap-1 cursor-pointer"
                       >
                         <X className="w-3 h-3" />
-                        Reject
+                        Cancel Invite
                       </button>
-                    </div>
+                    ) : (
+                      <>
+                        <button
+                          onClick={() => handleReviewRequest(request.request_id, true)}
+                          disabled={loading}
+                          className="px-3 py-1.5 rounded-lg bg-emerald-500 hover:bg-emerald-400 text-zinc-950 text-xs font-medium transition-colors disabled:opacity-50 flex items-center gap-1 cursor-pointer"
+                        >
+                          <Check className="w-3 h-3" />
+                          Approve
+                        </button>
+                        <button
+                          onClick={() => handleReviewRequest(request.request_id, false)}
+                          disabled={loading}
+                          className="px-3 py-1.5 rounded-lg bg-red-500/10 hover:bg-red-500/20 text-red-400 text-xs font-medium transition-colors disabled:opacity-50 flex items-center gap-1 cursor-pointer"
+                        >
+                          <X className="w-3 h-3" />
+                          Reject
+                        </button>
+                      </>
+                    )}
                   </div>
                 </div>
               ))

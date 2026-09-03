@@ -417,6 +417,12 @@ export default function NoteEditor({ note, notebookId, user, branches = [], curr
     });
   }, [blocks]);
 
+  // Synchronize blocks and clear drafts when note or currentBranch changes
+  useEffect(() => {
+    setBlocks(note.blocks || []);
+    setEditingBlocks({});
+  }, [note.blocks, currentBranch?.branch_id]);
+
   // DnD sensors
   const sensors = useSensors(
     useSensor(PointerSensor, {
@@ -597,7 +603,7 @@ export default function NoteEditor({ note, notebookId, user, branches = [], curr
     } finally {
       setSaving(false);
     }
-  }, [selectionMenu, blocks, editingBlocks, note.note_id, router]);
+  }, [selectionMenu, blocks, editingBlocks, note.note_id, router, currentBranch]);
 
   const handleContentChange = useCallback((slotId: string, content: string) => {
     setEditingBlocks((prev) => ({ ...prev, [slotId]: content }));
@@ -652,7 +658,7 @@ export default function NoteEditor({ note, notebookId, user, branches = [], curr
     } finally {
       setSaving(false);
     }
-  }, [editingBlocks, note.note_id, router]);
+  }, [editingBlocks, note.note_id, router, currentBranch]);
 
   const handleCancelEdit = useCallback((slotId: string) => {
     setEditingBlocks((prev) => {
@@ -676,18 +682,43 @@ export default function NoteEditor({ note, notebookId, user, branches = [], curr
       : -1;
     const nextSlotId = prevIndex < blocks.length - 1 ? blocks[prevIndex + 1]?.slot_id : null;
 
+    const defaultContent = getDefaultContent(blockType);
+
     try {
       const result = await insertBlock({
         noteId: note.note_id,
         prevSlotId,
         nextSlotId,
         blockType,
-        content: getDefaultContent(blockType),
+        content: defaultContent,
       });
 
-      if (result.success) {
-        router.refresh();
+      if (result.success && result.slotId) {
+        const newBlock: Block = {
+          slot_id: result.slotId,
+          lexorank_key: result.lexorankKey || '1|100000',
+          block_type: blockType,
+          content_text: result.contentText || defaultContent,
+          version_id: result.versionId || '',
+          author_username: user.username,
+          created_at: new Date().toISOString(),
+        };
+
+        setBlocks((prev) => {
+          if (!prevSlotId) {
+            return [newBlock, ...prev];
+          }
+          const index = prev.findIndex((b) => b.slot_id === prevSlotId);
+          if (index === -1) {
+            return [...prev, newBlock];
+          }
+          const next = [...prev];
+          next.splice(index + 1, 0, newBlock);
+          return next;
+        });
+
         setShowInsertMenu(null);
+        router.refresh();
       } else {
         setError(result.error || 'Failed to insert block');
       }
@@ -696,7 +727,7 @@ export default function NoteEditor({ note, notebookId, user, branches = [], curr
     } finally {
       setSaving(false);
     }
-  }, [blocks, isAttemptBranch, note.note_id, router]);
+  }, [blocks, isAttemptBranch, note.note_id, router, currentBranch]);
 
   const handleDeleteBlock = useCallback(async (slotId: string) => {
     if (isAttemptBranch) return;

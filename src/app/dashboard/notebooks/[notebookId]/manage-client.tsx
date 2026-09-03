@@ -16,8 +16,13 @@ import {
   GitBranch,
   Users,
   Settings,
+  Globe,
+  Lock,
+  Shield,
+  Save,
 } from 'lucide-react';
 import { createNote, updateNoteOrder, deleteNote } from '@/actions/notes';
+import { updateNotebook } from '@/actions/notebooks';
 import type { Notebook } from '@/actions/notebooks';
 import type { Note } from '@/actions/notes';
 import PermissionsManager from '@/components/permissions/PermissionsManager';
@@ -60,16 +65,42 @@ export default function NotebookManageClient({
   collaborators,
   accessRequests,
 }: NotebookManageClientProps) {
-  const [activeTab, setActiveTab] = useState<'notes' | 'permissions'>('notes');
+  const [activeTab, setActiveTab] = useState<'notes' | 'permissions' | 'settings'>('notes');
   const [notes, setNotes] = useState(initialNotes);
   const [draggedNote, setDraggedNote] = useState<string | null>(null);
   const [showCreateModal, setShowCreateModal] = useState(false);
   const [newNoteTitle, setNewNoteTitle] = useState('');
   const [newNoteDescription, setNewNoteDescription] = useState('');
+  const [nbTitle, setNbTitle] = useState(notebook.title);
+  const [nbDescription, setNbDescription] = useState(notebook.description || '');
+  const [nbVisibility, setNbVisibility] = useState<'PUBLIC' | 'PRIVATE' | 'UNLISTED'>(notebook.visibility as any || 'PRIVATE');
+  const [isSavingSettings, setIsSavingSettings] = useState(false);
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [toast, setToast] = useState<{ message: string; type: 'success' | 'error' } | null>(null);
 
   const canEdit = ['OWNER', 'MAINTAINER'].includes(notebook.role_type);
+
+  const handleSaveSettings = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!canEdit) return;
+    setIsSavingSettings(true);
+    try {
+      const res = await updateNotebook(notebook.notebook_id, {
+        title: nbTitle.trim(),
+        description: nbDescription.trim(),
+        visibility: nbVisibility,
+      }, userId);
+      if (res.success) {
+        showToast('Notebook settings and visibility updated');
+      } else {
+        showToast(res.error || 'Failed to update settings', 'error');
+      }
+    } catch (err: any) {
+      showToast(err.message || 'Error updating settings', 'error');
+    } finally {
+      setIsSavingSettings(false);
+    }
+  };
 
   const showToast = (message: string, type: 'success' | 'error' = 'success') => {
     setToast({ message, type });
@@ -269,6 +300,20 @@ export default function NotebookManageClient({
               </span>
             )}
           </button>
+
+          {canEdit && (
+            <button
+              onClick={() => setActiveTab('settings')}
+              className={`px-4 py-3 text-sm font-medium transition-colors flex items-center gap-2 border-b-2 ${
+                activeTab === 'settings'
+                  ? 'text-emerald-400 border-emerald-500'
+                  : 'text-zinc-400 hover:text-zinc-300 border-transparent'
+              }`}
+            >
+              <Settings className="w-4 h-4" />
+              Settings & Visibility
+            </button>
+          )}
         </div>
 
         {/* Tab Content */}
@@ -386,6 +431,124 @@ export default function NotebookManageClient({
             initialCollaborators={collaborators}
             initialAccessRequests={accessRequests}
           />
+        )}
+
+        {activeTab === 'settings' && (
+          <form onSubmit={handleSaveSettings} className="p-6 rounded-2xl bg-zinc-900/40 border border-zinc-800 space-y-6 max-w-2xl">
+            <div>
+              <h2 className="text-base font-bold text-zinc-100 mb-1">Notebook Settings</h2>
+              <p className="text-xs text-zinc-400">Manage notebook title, description, and privacy visibility</p>
+            </div>
+
+            <div className="space-y-4">
+              <div>
+                <label className="block text-xs font-semibold text-zinc-300 mb-1.5">
+                  Notebook Title
+                </label>
+                <input
+                  type="text"
+                  required
+                  value={nbTitle}
+                  onChange={(e) => setNbTitle(e.target.value)}
+                  className="w-full px-3.5 py-2 rounded-xl bg-zinc-950 border border-zinc-800 text-zinc-100 text-sm focus:outline-none focus:border-emerald-500/50"
+                />
+              </div>
+
+              <div>
+                <label className="block text-xs font-semibold text-zinc-300 mb-1.5">
+                  Description
+                </label>
+                <textarea
+                  rows={3}
+                  value={nbDescription}
+                  onChange={(e) => setNbDescription(e.target.value)}
+                  placeholder="What is this notebook collection about?"
+                  className="w-full px-3.5 py-2 rounded-xl bg-zinc-950 border border-zinc-800 text-zinc-100 text-sm focus:outline-none focus:border-emerald-500/50 resize-none"
+                />
+              </div>
+
+              <div>
+                <label className="block text-xs font-semibold text-zinc-300 mb-2">
+                  Access & Visibility Permissions
+                </label>
+                <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
+                  <button
+                    type="button"
+                    onClick={() => setNbVisibility('PUBLIC')}
+                    className={`p-3 rounded-xl border flex flex-col items-start gap-1.5 text-left transition-all cursor-pointer ${
+                      nbVisibility === 'PUBLIC'
+                        ? 'border-emerald-500 bg-emerald-500/10 text-emerald-400 ring-1 ring-emerald-500/40'
+                        : 'border-zinc-800 bg-zinc-950/60 text-zinc-400 hover:text-zinc-200'
+                    }`}
+                  >
+                    <div className="flex items-center gap-1.5 font-semibold text-xs">
+                      <Globe className="w-3.5 h-3.5" />
+                      <span>Public</span>
+                    </div>
+                    <p className="text-[11px] text-zinc-500 leading-tight">
+                      Searchable on explore & open for all readers
+                    </p>
+                  </button>
+
+                  <button
+                    type="button"
+                    onClick={() => setNbVisibility('UNLISTED')}
+                    className={`p-3 rounded-xl border flex flex-col items-start gap-1.5 text-left transition-all cursor-pointer ${
+                      nbVisibility === 'UNLISTED'
+                        ? 'border-emerald-500 bg-emerald-500/10 text-emerald-400 ring-1 ring-emerald-500/40'
+                        : 'border-zinc-800 bg-zinc-950/60 text-zinc-400 hover:text-zinc-200'
+                    }`}
+                  >
+                    <div className="flex items-center gap-1.5 font-semibold text-xs">
+                      <Shield className="w-3.5 h-3.5" />
+                      <span>Unlisted</span>
+                    </div>
+                    <p className="text-[11px] text-zinc-500 leading-tight">
+                      Accessible via direct link, hidden from explore
+                    </p>
+                  </button>
+
+                  <button
+                    type="button"
+                    onClick={() => setNbVisibility('PRIVATE')}
+                    className={`p-3 rounded-xl border flex flex-col items-start gap-1.5 text-left transition-all cursor-pointer ${
+                      nbVisibility === 'PRIVATE'
+                        ? 'border-emerald-500 bg-emerald-500/10 text-emerald-400 ring-1 ring-emerald-500/40'
+                        : 'border-zinc-800 bg-zinc-950/60 text-zinc-400 hover:text-zinc-200'
+                    }`}
+                  >
+                    <div className="flex items-center gap-1.5 font-semibold text-xs">
+                      <Lock className="w-3.5 h-3.5" />
+                      <span>Private</span>
+                    </div>
+                    <p className="text-[11px] text-zinc-500 leading-tight">
+                      Strictly invite-only for you and your collaborators
+                    </p>
+                  </button>
+                </div>
+              </div>
+            </div>
+
+            <div className="pt-2 flex justify-end">
+              <button
+                type="submit"
+                disabled={isSavingSettings}
+                className="px-5 py-2.5 rounded-xl bg-emerald-500 hover:bg-emerald-400 text-zinc-950 font-semibold text-xs transition-all shadow-md shadow-emerald-500/20 flex items-center gap-1.5 cursor-pointer disabled:opacity-50"
+              >
+                {isSavingSettings ? (
+                  <>
+                    <div className="w-3.5 h-3.5 border-2 border-zinc-950 border-t-transparent rounded-full animate-spin" />
+                    <span>Saving...</span>
+                  </>
+                ) : (
+                  <>
+                    <Save className="w-3.5 h-3.5" />
+                    <span>Save Changes</span>
+                  </>
+                )}
+              </button>
+            </div>
+          </form>
         )}
       </div>
 

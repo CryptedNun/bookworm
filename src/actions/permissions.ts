@@ -3,7 +3,15 @@
 import { sql } from '@/lib/db';
 import { revalidatePath } from 'next/cache';
 import { getUserRole, getCollaborators } from '@/lib/permissions';
-import { notifyAccessRequest, notifyAccessGranted, notifyAccessRejected, notifyCollaboratorAdded, notifyCollaboratorRemoved, notifyRoleUpdated } from './notifications';
+import { 
+  notifyAccessRequest, 
+  notifyAccessGranted, 
+  notifyAccessRejected, 
+  notifyCollaboratorAdded, 
+  notifyCollaboratorRemoved, 
+  notifyRoleUpdated,
+  createNotification,
+} from './notifications';
 
 /**
  * Server Actions for Permission Management
@@ -103,7 +111,8 @@ export async function requestAccess(input: {
         requested_role,
         status,
         message,
-        initiated_by
+        initiated_by,
+        direction
       )
       VALUES (
         ${userId},
@@ -111,7 +120,8 @@ export async function requestAccess(input: {
         ${requestedRole},
         'PENDING',
         ${message || null},
-        ${userId}
+        ${userId},
+        'REQUEST'
       )
       RETURNING request_id, created_at
     `;
@@ -321,6 +331,8 @@ export async function getPendingAccessRequests(userId: string) {
         ar.resource_id,
         ar.requested_role,
         ar.status,
+        ar.direction,
+        ar.initiated_by,
         ar.message,
         ar.created_at,
         u.username,
@@ -461,24 +473,41 @@ export async function addCollaborator(input: {
       };
     }
 
-    // Grant access
+    // Check if there's already a pending invitation or request
+    const [existingRequest] = await sql`
+      SELECT request_id, direction, status
+      FROM access_requests
+      WHERE user_id = ${targetUser.user_id}
+        AND resource_id = ${resourceId}
+        AND status = 'PENDING'
+    `;
+
+    if (existingRequest) {
+      return { 
+        success: false, 
+        error: `User @${targetUser.username} already has an active pending ${existingRequest.direction === 'INVITE' ? 'invitation' : 'request'}` 
+      };
+    }
+
+    // Create pending invitation in access_requests
     await sql`
-      INSERT INTO collaborator_roles (
+      INSERT INTO access_requests (
         user_id,
         resource_id,
-        role_type,
-        granted_by,
-        capabilities
+        requested_role,
+        status,
+        message,
+        initiated_by,
+        direction
       )
       VALUES (
         ${targetUser.user_id},
         ${resourceId},
         ${role},
+        'PENDING',
+        ${`Invited to collaborate as ${role}`},
         ${grantedBy},
-        ${role === 'MAINTAINER' 
-          ? '{"can_create_issue": true, "can_delete_branch": true, "can_merge_branch": true, "can_add_contributor": false}'
-          : '{"can_create_issue": false, "can_delete_branch": false, "can_merge_branch": false, "can_add_contributor": false}'
-        }::jsonb
+        'INVITE'
       )
     `;
 
@@ -496,21 +525,28 @@ export async function addCollaborator(input: {
       WHERE r.resource_id = ${resourceId}
     `;
 
-    // Notify new collaborator
-    await notifyCollaboratorAdded({
+    // Get inviter username
+    const [inviter] = await sql`
+      SELECT username FROM users WHERE user_id = ${grantedBy}
+    `;
+
+    // Notify invited user
+    await createNotification({
       userId: targetUser.user_id,
-      resourceId,
-      resourceTitle: resourceInfo?.title || 'Unknown',
-      resourceType: resourceInfo?.resource_type || 'NOTEBOOK',
-      role,
-      addedBy: grantedBy,
+      type: 'ACCESS_REQUEST',
+      title: 'Collaboration Invitation',
+      message: `@${inviter?.username || 'A team member'} invited you to join ${resourceInfo?.resource_type?.toLowerCase() || 'resource'} "${resourceInfo?.title || 'Unknown'}" as ${role}`,
+      link: '/dashboard',
+      relatedResourceId: resourceId,
+      relatedUserId: grantedBy,
     });
 
     revalidatePath('/dashboard');
+    revalidatePath(`/dashboard/notebooks/${resourceId}/manage`);
 
     return {
       success: true,
-      message: `${targetUser.username} added as ${role}`,
+      message: `Invitation sent to @${targetUser.username} as ${role}. They will be granted access upon accepting.`,
     };
   } catch (error) {
     console.error('Error adding collaborator:', error);
@@ -518,6 +554,195 @@ export async function addCollaborator(input: {
       success: false,
       error: error instanceof Error ? error.message : 'Failed to add collaborator',
     };
+  }
+}
+
+/**
+ * Respond to an invitation (accept or decline)
+ */
+export async function respondToInvitation(input: {
+  requestId: string;
+  accept: boolean;
+  userId: string;
+}) {
+  try {
+    const { requestId, accept, userId } = input;
+
+    const [request] = await sql`
+      SELECT 
+        ar.request_id,
+        ar.user_id,
+        ar.resource_id,
+        ar.requested_role,
+        ar.status,
+        ar.direction,
+        ar.initiated_by,
+        r.resource_type,
+        CASE 
+          WHEN r.resource_type = 'NOTEBOOK' THEN nb.title
+          WHEN r.resource_type = 'NOTE' THEN n.title
+        END as resource_title
+      FROM access_requests ar
+      INNER JOIN resources r ON r.resource_id = ar.resource_id
+      LEFT JOIN notebooks nb ON nb.notebook_id = r.resource_id
+      LEFT JOIN notes n ON n.note_id = r.resource_id
+      WHERE ar.request_id = ${requestId}
+    `;
+
+    if (!request) {
+      return { success: false, error: 'Invitation not found' };
+    }
+
+    if (request.user_id !== userId) {
+      return { success: false, error: 'You are not authorized to respond to this invitation' };
+    }
+
+    if (request.status !== 'PENDING') {
+      return { success: false, error: 'This invitation is no longer pending' };
+    }
+
+    if (accept) {
+      // Create or update collaborator role
+      await sql`
+        INSERT INTO collaborator_roles (
+          user_id,
+          resource_id,
+          role_type,
+          granted_by,
+          capabilities
+        )
+        VALUES (
+          ${request.user_id},
+          ${request.resource_id},
+          ${request.requested_role},
+          ${request.initiated_by},
+          ${request.requested_role === 'MAINTAINER'
+            ? '{"can_create_issue": true, "can_delete_branch": true, "can_merge_branch": true, "can_add_contributor": false}'
+            : '{"can_create_issue": false, "can_delete_branch": false, "can_merge_branch": false, "can_add_contributor": false}'
+          }::jsonb
+        )
+        ON CONFLICT (user_id, resource_id) DO UPDATE
+        SET role_type = EXCLUDED.role_type,
+            granted_by = EXCLUDED.granted_by,
+            capabilities = EXCLUDED.capabilities
+      `;
+
+      await sql`
+        UPDATE access_requests
+        SET status = 'APPROVED',
+            reviewed_by = ${userId},
+            reviewed_at = NOW()
+        WHERE request_id = ${requestId}
+      `;
+
+      // Notify inviter that invitation was accepted
+      const [acceptedUser] = await sql`
+        SELECT username FROM users WHERE user_id = ${userId}
+      `;
+
+      await createNotification({
+        userId: request.initiated_by,
+        type: 'ACCESS_GRANTED',
+        title: 'Invitation Accepted',
+        message: `@${acceptedUser?.username || 'Invited user'} accepted your invitation to collaborate on "${request.resource_title}" as ${request.requested_role}`,
+        link: request.resource_type === 'NOTEBOOK' 
+          ? `/dashboard/notebooks/${request.resource_id}/manage` 
+          : `/dashboard/notes/${request.resource_id}`,
+        relatedResourceId: request.resource_id,
+        relatedUserId: userId,
+      });
+
+      revalidatePath('/dashboard');
+      return { 
+        success: true, 
+        message: `Invitation accepted! You now have access to "${request.resource_title}" as ${request.requested_role}.` 
+      };
+    } else {
+      await sql`
+        UPDATE access_requests
+        SET status = 'REJECTED',
+            reviewed_by = ${userId},
+            reviewed_at = NOW()
+        WHERE request_id = ${requestId}
+      `;
+
+      revalidatePath('/dashboard');
+      return { success: true, message: 'Invitation declined' };
+    }
+  } catch (error: any) {
+    console.error('Error responding to invitation:', error);
+    return { success: false, error: error.message || 'Failed to process invitation' };
+  }
+}
+
+/**
+ * Get pending invitations received by a user
+ */
+export async function getPendingInvitations(userId: string) {
+  try {
+    const invitations = await sql`
+      SELECT 
+        ar.request_id,
+        ar.resource_id,
+        ar.requested_role,
+        ar.created_at,
+        inviter.username as inviter_username,
+        inviter.email as inviter_email,
+        r.resource_type,
+        CASE 
+          WHEN r.resource_type = 'NOTEBOOK' THEN nb.title
+          WHEN r.resource_type = 'NOTE' THEN n.title
+        END as resource_title
+      FROM access_requests ar
+      INNER JOIN resources r ON r.resource_id = ar.resource_id
+      INNER JOIN users inviter ON inviter.user_id = ar.initiated_by
+      LEFT JOIN notebooks nb ON nb.notebook_id = r.resource_id
+      LEFT JOIN notes n ON n.note_id = r.resource_id
+      WHERE ar.user_id = ${userId}
+        AND ar.direction = 'INVITE'
+        AND ar.status = 'PENDING'
+      ORDER BY ar.created_at DESC
+    `;
+
+    return { success: true, invitations };
+  } catch (error: any) {
+    console.error('Error fetching pending invitations:', error);
+    return { success: false, error: 'Failed to fetch invitations', invitations: [] };
+  }
+}
+
+/**
+ * Cancel a sent invitation (by owner/maintainer)
+ */
+export async function cancelInvitation(requestId: string, canceledBy: string) {
+  try {
+    const [req] = await sql`
+      SELECT ar.resource_id, ar.initiated_by, ar.status
+      FROM access_requests ar
+      WHERE ar.request_id = ${requestId}
+    `;
+
+    if (!req) return { success: false, error: 'Invitation not found' };
+    if (req.status !== 'PENDING') return { success: false, error: 'Invitation is not pending' };
+
+    const role = await getUserRole(req.resource_id, canceledBy);
+    if (!role || !['OWNER', 'MAINTAINER'].includes(role.role)) {
+      return { success: false, error: 'Insufficient permissions' };
+    }
+
+    await sql`
+      UPDATE access_requests
+      SET status = 'CANCELLED',
+          reviewed_by = ${canceledBy},
+          reviewed_at = NOW()
+      WHERE request_id = ${requestId}
+    `;
+
+    revalidatePath('/dashboard');
+    revalidatePath(`/dashboard/notebooks/${req.resource_id}/manage`);
+    return { success: true, message: 'Invitation cancelled' };
+  } catch (error: any) {
+    return { success: false, error: error.message || 'Failed to cancel invitation' };
   }
 }
 
