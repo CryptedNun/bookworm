@@ -22,7 +22,7 @@ import rehypeRaw from 'rehype-raw';
 import DOMPurify from 'isomorphic-dompurify';
 import { Prism as SyntaxHighlighter } from 'react-syntax-highlighter';
 import { vscDarkPlus } from 'react-syntax-highlighter/dist/esm/styles/prism';
-import { Copy, Check, AlertCircle } from 'lucide-react';
+import { Copy, Check, AlertCircle, Info, Lightbulb, AlertTriangle, ShieldAlert, Sparkles } from 'lucide-react';
 import 'katex/dist/katex.min.css';
 
 interface RobustMarkdownProps {
@@ -285,15 +285,83 @@ export default function RobustMarkdown({ content, className = '' }: RobustMarkdo
             return <CodeBlock language={language} value={value} />;
           },
 
-          // Blockquotes
-          blockquote: ({ children, ...props }) => (
-            <blockquote 
-              className="border-l-4 border-emerald-500 pl-4 my-4 italic text-zinc-400 bg-zinc-900/30 py-2" 
-              {...props}
-            >
-              {children}
-            </blockquote>
-          ),
+          // Enhanced Blockquotes & GitHub Style Callouts ([!NOTE], [!TIP], etc.)
+          blockquote: ({ children, ...props }) => {
+            // Check if children contain a callout indicator
+            const childrenArray = React.Children.toArray(children);
+            const firstChild: any = childrenArray[0];
+
+            if (firstChild && firstChild.props && firstChild.props.children) {
+              const textContent = Array.isArray(firstChild.props.children)
+                ? firstChild.props.children.map((c: any) => (typeof c === 'string' ? c : '')).join('')
+                : typeof firstChild.props.children === 'string'
+                ? firstChild.props.children
+                : '';
+
+              const calloutMatch = textContent.match(/^\[!(NOTE|TIP|IMPORTANT|WARNING|CAUTION)\]/i);
+              if (calloutMatch) {
+                const calloutType = calloutMatch[1].toUpperCase();
+                const remainderText = textContent.replace(/^\[!(NOTE|TIP|IMPORTANT|WARNING|CAUTION)\]\s*/i, '');
+
+                const calloutConfigs: Record<string, { border: string; bg: string; text: string; icon: React.ReactNode }> = {
+                  NOTE: {
+                    border: 'border-blue-500/50',
+                    bg: 'bg-blue-950/20',
+                    text: 'text-blue-400',
+                    icon: <Info className="w-4 h-4 text-blue-400 shrink-0" />,
+                  },
+                  TIP: {
+                    border: 'border-emerald-500/50',
+                    bg: 'bg-emerald-950/20',
+                    text: 'text-emerald-400',
+                    icon: <Lightbulb className="w-4 h-4 text-emerald-400 shrink-0" />,
+                  },
+                  IMPORTANT: {
+                    border: 'border-purple-500/50',
+                    bg: 'bg-purple-950/20',
+                    text: 'text-purple-400',
+                    icon: <Sparkles className="w-4 h-4 text-purple-400 shrink-0" />,
+                  },
+                  WARNING: {
+                    border: 'border-amber-500/50',
+                    bg: 'bg-amber-950/20',
+                    text: 'text-amber-400',
+                    icon: <AlertTriangle className="w-4 h-4 text-amber-400 shrink-0" />,
+                  },
+                  CAUTION: {
+                    border: 'border-red-500/50',
+                    bg: 'bg-red-950/20',
+                    text: 'text-red-400',
+                    icon: <ShieldAlert className="w-4 h-4 text-red-400 shrink-0" />,
+                  },
+                };
+
+                const config = calloutConfigs[calloutType] || calloutConfigs.NOTE;
+
+                return (
+                  <div className={`p-4 my-4 rounded-xl border ${config.border} ${config.bg} space-y-1.5`}>
+                    <div className={`flex items-center gap-2 font-bold text-xs ${config.text} tracking-wider uppercase`}>
+                      {config.icon}
+                      <span>{calloutType}</span>
+                    </div>
+                    <div className="text-zinc-300 text-sm pl-6 leading-relaxed">
+                      {remainderText ? <p>{remainderText}</p> : null}
+                      {childrenArray.slice(1)}
+                    </div>
+                  </div>
+                );
+              }
+            }
+
+            return (
+              <blockquote 
+                className="border-l-4 border-emerald-500/60 pl-4 my-4 italic text-zinc-400 bg-zinc-900/30 py-2 rounded-r-lg" 
+                {...props}
+              >
+                {children}
+              </blockquote>
+            );
+          },
 
           // Horizontal rules
           hr: ({ ...props }) => (

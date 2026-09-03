@@ -22,6 +22,8 @@ import {
   MessageSquareQuote,
   GitBranch,
   ChevronDown,
+  ArrowRight,
+  ChevronRight,
 } from 'lucide-react';
 import {
   DndContext,
@@ -742,78 +744,106 @@ export default function NoteEditor({ note, notebookId, user, branches = [], curr
   return (
     <div className="min-h-screen bg-zinc-950 text-zinc-100">
       {/* Top Bar */}
-      <div className="sticky top-0 z-50 bg-zinc-900/95 backdrop-blur-sm border-b border-zinc-800">
-        <div className="max-w-5xl mx-auto px-6 py-4 flex items-center justify-between">
-          <div className="flex items-center gap-4">
+      <div className="sticky top-0 z-50 bg-zinc-900/95 backdrop-blur-xl border-b border-white/[0.08]">
+        <div className="max-w-5xl mx-auto px-6 py-3.5 flex items-center justify-between gap-4">
+          <div className="flex items-center gap-3 min-w-0">
             <Link
-              href={`/dashboard/notebooks/${notebookId}`}
-              className="p-2 rounded-lg hover:bg-zinc-800 transition-colors text-zinc-400 hover:text-zinc-100"
+              href={`/dashboard/notebooks/${notebookId}/notes/${note.note_id}`}
+              className="p-2 rounded-xl bg-zinc-900/60 hover:bg-zinc-800 border border-white/[0.08] text-zinc-400 hover:text-zinc-100 transition-all"
+              title="Return to note"
             >
-              <ArrowLeft className="w-5 h-5" />
+              <ArrowLeft className="w-4 h-4" />
             </Link>
             
-            <div>
-              <h1 className="text-lg font-bold text-zinc-100">{note.title}</h1>
-              <p className="text-xs text-zinc-500">
-                Editing • {blocks.length} blocks
-                {saving && <span className="ml-2">• Saving...</span>}
-              </p>
+            <div className="min-w-0">
+              <div className="flex items-center gap-1.5 text-xs text-zinc-500 truncate mb-0.5">
+                <Link href="/dashboard" className="hover:text-zinc-300 transition-colors">Dashboard</Link>
+                <ChevronRight className="w-3 h-3 shrink-0" />
+                <Link href={`/dashboard/notebooks/${notebookId}`} className="hover:text-zinc-300 transition-colors truncate max-w-[90px]">Notebook</Link>
+                <ChevronRight className="w-3 h-3 shrink-0" />
+                <span className="text-zinc-300 truncate max-w-[120px]">{note.title}</span>
+              </div>
+              <div className="flex items-center gap-2">
+                <h1 className="text-sm font-bold text-zinc-100 truncate">{note.title}</h1>
+                <span className="text-[11px] text-zinc-500">
+                  • {blocks.length} {blocks.length === 1 ? 'block' : 'blocks'}
+                  {saving && <span className="text-emerald-400 font-medium ml-1.5 animate-pulse">• Saving...</span>}
+                </span>
+              </div>
             </div>
           </div>
 
-          <div className="flex items-center gap-2">
+          <div className="flex items-center gap-2 shrink-0">
             {/* Branch Switcher */}
             {branches.length > 0 && currentBranch && (
               <div className="relative branch-switcher">
                 <button
                   onClick={() => setShowBranchMenu(!showBranchMenu)}
-                  className="px-3 py-2 rounded-lg bg-zinc-800 hover:bg-zinc-700 text-zinc-200 text-sm font-medium transition-colors flex items-center gap-2"
+                  className={`px-3 py-1.5 rounded-xl border text-xs font-medium transition-all flex items-center gap-2 ${
+                    currentBranch.is_main
+                      ? 'bg-zinc-850/80 hover:bg-zinc-800 border-zinc-700/60 text-zinc-200'
+                      : 'bg-amber-500/10 hover:bg-amber-500/15 border-amber-500/30 text-amber-300'
+                  }`}
                 >
-                  <GitBranch className="w-4 h-4" />
-                  <span>{currentBranch.branch_name}</span>
-                  <ChevronDown className="w-4 h-4" />
+                  <GitBranch className="w-3.5 h-3.5" />
+                  <span className="font-mono">{currentBranch.branch_name}</span>
+                  {currentBranch.is_main ? (
+                    <span className="px-1.5 py-0.2 rounded text-[9px] font-mono bg-emerald-500/20 text-emerald-400 border border-emerald-500/30">
+                      MAIN
+                    </span>
+                  ) : (
+                    <span className="px-1.5 py-0.2 rounded text-[9px] font-mono bg-amber-500/20 text-amber-300 border border-amber-500/30">
+                      ATTEMPT
+                    </span>
+                  )}
+                  <ChevronDown className="w-3.5 h-3.5 opacity-60" />
                 </button>
 
                 {showBranchMenu && (
-                  <div className="absolute top-full right-0 mt-2 bg-zinc-800 rounded-lg shadow-lg border border-zinc-700 py-2 min-w-[200px] z-50">
-                    <div className="px-3 py-2 text-xs font-semibold text-zinc-500 border-b border-zinc-700">
+                  <div className="absolute top-full right-0 mt-2 bg-zinc-900 rounded-xl shadow-2xl border border-white/[0.08] py-1.5 min-w-[220px] z-50 animate-popover-in divide-y divide-zinc-800/70">
+                    <div className="px-3 py-1.5 text-[10px] font-semibold uppercase tracking-wider text-zinc-500">
                       Switch Branch
                     </div>
-                    {branches
-                      .filter(b => !b.is_merged)
-                      .map(branch => (
-                        <button
-                          key={branch.branch_id}
-                          onClick={() => {
-                            setShowBranchMenu(false);
-                            router.push(
-                              `/dashboard/notebooks/${notebookId}/notes/${note.note_id}/edit${
-                                branch.is_main ? '' : `?branch=${branch.branch_id}`
-                              }`
-                            );
-                          }}
-                          className={`w-full px-4 py-2 text-left hover:bg-zinc-700 transition-colors flex items-center gap-2 text-sm ${
-                            branch.branch_id === currentBranch.branch_id
-                              ? 'text-emerald-400 bg-emerald-500/10'
-                              : 'text-zinc-200'
-                          }`}
-                        >
-                          <GitBranch className="w-4 h-4" />
-                          <span>{branch.branch_name}</span>
-                          {branch.is_main && (
-                            <span className="ml-auto text-xs text-emerald-400 font-medium">MAIN</span>
-                          )}
-                        </button>
-                      ))}
-                    <div className="border-t border-zinc-700 mt-2 pt-2">
+                    <div className="py-1">
+                      {branches
+                        .filter(b => !b.is_merged)
+                        .map(branch => (
+                          <button
+                            key={branch.branch_id}
+                            onClick={() => {
+                              setShowBranchMenu(false);
+                              router.push(
+                                `/dashboard/notebooks/${notebookId}/notes/${note.note_id}/edit${
+                                  branch.is_main ? '' : `?branch=${branch.branch_id}`
+                                }`
+                              );
+                            }}
+                            className={`w-full px-3 py-1.5 text-left hover:bg-zinc-800/80 transition-colors flex items-center gap-2 text-xs ${
+                              branch.branch_id === currentBranch.branch_id
+                                ? 'text-emerald-400 bg-emerald-500/10 font-medium'
+                                : 'text-zinc-300'
+                            }`}
+                          >
+                            <GitBranch className="w-3.5 h-3.5" />
+                            <span className="font-mono truncate flex-1">{branch.branch_name}</span>
+                            {branch.is_main && (
+                              <span className="text-[9px] px-1.5 py-0.2 rounded bg-emerald-500/15 text-emerald-400 border border-emerald-500/30 font-mono">
+                                MAIN
+                              </span>
+                            )}
+                          </button>
+                        ))}
+                    </div>
+                    <div className="pt-1">
                       <button
                         onClick={() => {
                           setShowBranchMenu(false);
                           router.push(`/dashboard/notebooks/${notebookId}/notes/${note.note_id}/branches`);
                         }}
-                        className="w-full px-4 py-2 text-left hover:bg-zinc-700 transition-colors text-sm text-zinc-400 hover:text-zinc-200"
+                        className="w-full px-3 py-1.5 text-left hover:bg-zinc-800/80 transition-colors text-xs text-zinc-400 hover:text-zinc-200 flex items-center justify-between"
                       >
-                        View All Branches →
+                        <span>View All Branches</span>
+                        <ArrowRight className="w-3 h-3" />
                       </button>
                     </div>
                   </div>
@@ -822,13 +852,34 @@ export default function NoteEditor({ note, notebookId, user, branches = [], curr
             )}
 
             <button
-              onClick={() => router.push(`/dashboard/notebooks/${notebookId}`)}
-              className="px-4 py-2 rounded-lg bg-zinc-800 hover:bg-zinc-700 text-zinc-200 text-sm font-medium transition-colors"
+              onClick={() => router.push(`/dashboard/notebooks/${notebookId}/notes/${note.note_id}`)}
+              className="px-3.5 py-1.5 rounded-xl bg-zinc-800/80 hover:bg-zinc-700 text-zinc-200 text-xs font-medium border border-zinc-700/50 transition-colors"
             >
               Done
             </button>
           </div>
         </div>
+
+        {/* Branch Awareness Banner for Non-Main Branches */}
+        {currentBranch && !currentBranch.is_main && (
+          <div className="bg-amber-500/10 border-b border-amber-500/20 px-6 py-2">
+            <div className="max-w-5xl mx-auto flex items-center justify-between gap-4 text-xs">
+              <div className="flex items-center gap-2 text-amber-300">
+                <GitBranch className="w-4 h-4 text-amber-400 shrink-0" />
+                <span>
+                  Editing on branch: <strong className="font-mono text-amber-200">{currentBranch.branch_name}</strong>. Changes here are isolated to this attempt.
+                </span>
+              </div>
+              <Link
+                href={`/dashboard/notebooks/${notebookId}/notes/${note.note_id}/branches?reviewBranchId=${currentBranch.branch_id}`}
+                className="px-2.5 py-1 rounded-lg bg-amber-500/20 hover:bg-amber-500/30 text-amber-200 text-[11px] font-medium transition-colors shrink-0 flex items-center gap-1 border border-amber-500/30"
+              >
+                <span>Review & Merge</span>
+                <ArrowRight className="w-3 h-3" />
+              </Link>
+            </div>
+          </div>
+        )}
 
         {/* Error Banner */}
         {error && (
@@ -857,7 +908,7 @@ export default function NoteEditor({ note, notebookId, user, branches = [], curr
       )}
 
       {/* Editor */}
-      <div className="max-w-4xl mx-auto px-6 py-12">
+      <div className="max-w-4xl mx-auto px-6 py-12 animate-page-in">
         <div className="space-y-4">
           {/* Insert at start */}
           <div className="relative">

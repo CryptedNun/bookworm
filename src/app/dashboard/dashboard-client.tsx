@@ -48,6 +48,7 @@ import StorageAndActivityWidget from "@/components/dashboard/StorageAndActivityW
 import type { UnmergedBranchItem, DashboardNoteItem, StorageAnalytics, ActivityItem } from "@/actions/dashboard";
 import ForkNoteModal from "@/components/notes/ForkNoteModal";
 import { TopNav } from "@/components/dashboard/TopNav";
+import type { StarredResourceItem } from "@/actions/stars";
 
 // ==========================================
 // 1. DATA MODELS & SAMPLE DATA
@@ -126,6 +127,7 @@ export function LeftSidebar({
   notebooks,
   dashboardNotes = [],
   userRoles = [],
+  starredItems = [],
   onOpenProfile,
   onOpenCreate,
   onSelectNote,
@@ -134,6 +136,7 @@ export function LeftSidebar({
   notebooks: Notebook[];
   dashboardNotes?: DashboardNoteItem[];
   userRoles?: Array<{ notebook_id: string; role_type: string }>;
+  starredItems?: StarredResourceItem[];
   onOpenProfile: () => void;
   onOpenCreate: (type: "notebook" | "note" | "issue" | "branch" | "fork") => void;
   onSelectNote?: (note: NoteItem) => void;
@@ -303,12 +306,56 @@ export function LeftSidebar({
           >
             Contributed ({contributedNotebooks.length})
           </button>
+          <button
+            onClick={() => setActiveTab("starred")}
+            className={`px-2 py-1 rounded-md transition-colors cursor-pointer flex items-center gap-1 ${
+              activeTab === "starred"
+                ? "bg-zinc-800 text-amber-400 font-semibold"
+                : "text-zinc-400 hover:text-zinc-200"
+            }`}
+          >
+            <Star className="w-3 h-3 text-amber-400 fill-amber-400" />
+            <span>Starred ({starredItems.length})</span>
+          </button>
         </div>
       </div>
 
       {/* 3. SCROLLABLE DIRECTORY: Possessions & Contributions */}
       <div className="flex-1 overflow-y-auto p-3 space-y-3 text-xs">
-        {filteredNotebooks.length > 0 ? (
+        {activeTab === "starred" ? (
+          <div className="space-y-2">
+            {starredItems.length === 0 ? (
+              <div className="p-4 text-center text-zinc-500 text-xs">
+                No starred items yet. Star any note or notebook to bookmark it!
+              </div>
+            ) : (
+              starredItems.map((item) => (
+                <Link
+                  key={item.resource_id}
+                  href={
+                    item.resource_type === 'NOTE' && item.notebook_id
+                      ? `/dashboard/notebooks/${item.notebook_id}/notes/${item.resource_id}`
+                      : `/dashboard/notebooks/${item.resource_id}`
+                  }
+                  className="p-2.5 rounded-xl border border-zinc-800/80 bg-zinc-900/40 hover:border-amber-500/30 flex items-center justify-between gap-2 transition-all block group"
+                >
+                  <div className="flex items-center gap-2 min-w-0">
+                    <Star className="w-3.5 h-3.5 text-amber-400 fill-amber-400 shrink-0" />
+                    <div className="truncate">
+                      <div className="text-xs font-semibold text-zinc-200 group-hover:text-amber-300 truncate">
+                        {item.title}
+                      </div>
+                      <div className="text-[10px] text-zinc-500 font-mono">
+                        {item.resource_type === 'NOTE' ? `Note in ${item.notebook_title || 'notebook'}` : 'Notebook'}
+                      </div>
+                    </div>
+                  </div>
+                  <ArrowRight className="w-3 h-3 text-zinc-500 group-hover:text-zinc-300" />
+                </Link>
+              ))
+            )}
+          </div>
+        ) : filteredNotebooks.length > 0 ? (
           <div className="space-y-2">
             {filteredNotebooks.map((nb) => {
               const isExpanded = !!expandedNotebooks[nb.id];
@@ -404,6 +451,7 @@ export function HomeFeed({
   userRoles = [],
   analytics,
   activities = [],
+  starredItems = [],
   onOpenCreate,
 }: {
   user: UserWithStats;
@@ -413,6 +461,7 @@ export function HomeFeed({
   userRoles?: Array<{ notebook_id: string; role_type: string }>;
   analytics?: StorageAnalytics;
   activities?: ActivityItem[];
+  starredItems?: StarredResourceItem[];
   onOpenCreate: (type: "notebook" | "note" | "issue" | "branch" | "fork") => void;
 }) {
   return (
@@ -538,6 +587,43 @@ export function HomeFeed({
           analytics={analytics}
           activities={activities || []}
         />
+      )}
+
+      {/* 4.7. Starred Quick Access Shelf */}
+      {starredItems && starredItems.length > 0 && (
+        <div className="space-y-3 p-4 rounded-2xl bg-amber-950/10 border border-amber-500/20">
+          <div className="flex items-center justify-between">
+            <div className="flex items-center gap-2 text-xs font-bold text-amber-300">
+              <Star className="w-4 h-4 text-amber-400 fill-amber-400" />
+              <span>Starred Notes & Workspaces</span>
+            </div>
+            <span className="text-[11px] font-mono text-zinc-500">{starredItems.length} Bookmarks</span>
+          </div>
+
+          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3">
+            {starredItems.map((st) => (
+              <Link
+                key={st.resource_id}
+                href={
+                  st.resource_type === 'NOTE' && st.notebook_id
+                    ? `/dashboard/notebooks/${st.notebook_id}/notes/${st.resource_id}`
+                    : `/dashboard/notebooks/${st.resource_id}`
+                }
+                className="p-3 rounded-xl bg-zinc-900/80 border border-zinc-800 hover:border-amber-500/40 transition-all flex items-center justify-between gap-2 group"
+              >
+                <div className="min-w-0 space-y-0.5">
+                  <div className="text-xs font-semibold text-zinc-200 group-hover:text-amber-300 truncate">
+                    {st.title}
+                  </div>
+                  <div className="text-[10px] text-zinc-500 font-mono">
+                    {st.resource_type === 'NOTE' ? `Note in ${st.notebook_title || 'notebook'}` : 'Notebook'}
+                  </div>
+                </div>
+                <ArrowRight className="w-3.5 h-3.5 text-zinc-500 group-hover:text-amber-400 shrink-0" />
+              </Link>
+            ))}
+          </div>
+        </div>
       )}
 
       {/* 5. Workspaces & Modular Notes Explorer */}
@@ -1585,6 +1671,7 @@ interface DashboardClientProps {
   userRoles?: Array<{ notebook_id: string; role_type: string }>;
   analytics?: StorageAnalytics;
   activities?: ActivityItem[];
+  starredItems?: StarredResourceItem[];
 }
 
 export default function DashboardClient({ 
@@ -1595,6 +1682,7 @@ export default function DashboardClient({
   userRoles = [],
   analytics,
   activities = [],
+  starredItems = [],
 }: DashboardClientProps) {
   const [isProfileOpen, setIsProfileOpen] = useState(false);
   const [isCreateOpen, setIsCreateOpen] = useState(false);
@@ -1652,6 +1740,7 @@ export default function DashboardClient({
           notebooks={notebooks}
           dashboardNotes={dashboardNotes}
           userRoles={userRoles}
+          starredItems={starredItems}
           onOpenProfile={() => setIsProfileOpen(true)}
           onOpenCreate={handleOpenCreate}
         />
@@ -1665,6 +1754,7 @@ export default function DashboardClient({
           userRoles={userRoles}
           analytics={analytics}
           activities={activities}
+          starredItems={starredItems}
           onOpenCreate={handleOpenCreate} 
         />
       </div>

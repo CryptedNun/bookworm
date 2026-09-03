@@ -19,6 +19,10 @@ import {
   Eye,
   Code,
   Columns,
+  ChevronRight,
+  CircleDot,
+  ArrowRight,
+  Network,
 } from 'lucide-react';
 import { mergeBranch, deleteBranch, compareBranches } from '@/actions/branches';
 import type { Branch, BranchWithCommits } from '@/actions/branches';
@@ -165,40 +169,43 @@ export default function BranchesClient({ note, branches, notebookId, user }: Bra
   return (
     <div className="min-h-screen bg-zinc-950 text-zinc-100">
       {/* Top Bar */}
-      <div className="sticky top-0 z-50 bg-zinc-900/95 backdrop-blur-sm border-b border-zinc-800">
+      <div className="sticky top-0 z-50 bg-zinc-900/95 backdrop-blur-xl border-b border-white/[0.08]">
         <div className="max-w-7xl mx-auto px-6 py-4 flex items-center justify-between">
-          <div className="flex items-center gap-4">
+          <div className="flex items-center gap-3 min-w-0">
             <Link
-              href={`/dashboard/notebooks/${notebookId}/notes/${note.note_id}/edit`}
-              className="p-2 rounded-lg hover:bg-zinc-800 transition-colors text-zinc-400 hover:text-zinc-100"
+              href={`/dashboard/notebooks/${notebookId}/notes/${note.note_id}`}
+              className="p-2 rounded-xl bg-zinc-900/60 hover:bg-zinc-800 border border-white/[0.08] text-zinc-400 hover:text-zinc-100 transition-all"
             >
-              <ArrowLeft className="w-5 h-5" />
+              <ArrowLeft className="w-4 h-4" />
             </Link>
 
-            <div>
-              <h1 className="text-lg font-bold text-zinc-100 flex items-center gap-2">
-                <GitBranch className="w-5 h-5" />
-                Branches
-              </h1>
-              <p className="text-xs text-zinc-500">{note.title}</p>
+            {/* Breadcrumb */}
+            <div className="flex items-center gap-1.5 text-xs text-zinc-500 min-w-0">
+              <Link href="/dashboard" className="hover:text-zinc-300 transition-colors">Dashboard</Link>
+              <ChevronRight className="w-3 h-3 shrink-0" />
+              <Link href={`/dashboard/notebooks/${notebookId}`} className="hover:text-zinc-300 transition-colors truncate max-w-[80px]">Notebook</Link>
+              <ChevronRight className="w-3 h-3 shrink-0" />
+              <Link href={`/dashboard/notebooks/${notebookId}/notes/${note.note_id}`} className="hover:text-zinc-300 transition-colors truncate max-w-[80px]">{note.title}</Link>
+              <ChevronRight className="w-3 h-3 shrink-0" />
+              <span className="text-zinc-200 font-semibold">Branches</span>
             </div>
           </div>
 
-          <div className="flex items-center gap-2">
+          <div className="flex items-center gap-2 shrink-0">
             <Link
               href={`/dashboard/notebooks/${notebookId}/notes/${note.note_id}/tree`}
-              className="px-4 py-2 rounded-lg bg-blue-500/10 hover:bg-blue-500/20 text-blue-400 border border-blue-500/20 text-sm font-medium transition-colors flex items-center gap-2"
+              className="px-3 py-1.5 rounded-xl bg-zinc-900/80 hover:bg-zinc-800 border border-white/[0.08] text-zinc-300 hover:text-zinc-100 text-xs font-medium transition-all flex items-center gap-1.5"
             >
-              <GitBranch className="w-4 h-4" />
-              Tree View
+              <Network className="w-3.5 h-3.5" />
+              Commit Tree
             </Link>
             
             <button
               onClick={() => router.push(`/dashboard/notebooks/${notebookId}/notes/${note.note_id}/issues`)}
               disabled={loading}
-              className="px-4 py-2 rounded-lg bg-emerald-500 hover:bg-emerald-400 text-zinc-950 text-sm font-medium transition-colors disabled:opacity-50 flex items-center gap-2"
+              className="px-3.5 py-1.5 rounded-xl bg-emerald-500 hover:bg-emerald-400 text-zinc-950 text-xs font-bold transition-all disabled:opacity-50 flex items-center gap-1.5 shadow-md shadow-emerald-500/20"
             >
-              <Plus className="w-4 h-4" />
+              <Plus className="w-3.5 h-3.5" />
               Create Issue
             </button>
           </div>
@@ -250,7 +257,34 @@ export default function BranchesClient({ note, branches, notebookId, user }: Bra
           </div>
         </div>
 
-        <div className="space-y-8">
+        {/* VCS Workflow Progress Indicator */}
+        <div className="mb-8 flex items-center justify-center gap-0">
+          <div className="flex items-center gap-2 px-4 py-2.5 rounded-l-xl bg-emerald-500/10 border border-emerald-500/20">
+            <CircleDot className="w-4 h-4 text-emerald-400" />
+            <div className="text-xs">
+              <div className="font-semibold text-emerald-400">1. Create Issue</div>
+              <div className="text-emerald-400/60">Target a block</div>
+            </div>
+          </div>
+          <ArrowRight className="w-4 h-4 text-zinc-600 -mx-0.5 z-10" />
+          <div className="flex items-center gap-2 px-4 py-2.5 bg-sky-500/10 border-y border-sky-500/20">
+            <Code className="w-4 h-4 text-sky-400" />
+            <div className="text-xs">
+              <div className="font-semibold text-sky-400">2. Edit on Branch</div>
+              <div className="text-sky-400/60">Auto-created branch</div>
+            </div>
+          </div>
+          <ArrowRight className="w-4 h-4 text-zinc-600 -mx-0.5 z-10" />
+          <div className="flex items-center gap-2 px-4 py-2.5 rounded-r-xl bg-purple-500/10 border border-purple-500/20">
+            <GitMerge className="w-4 h-4 text-purple-400" />
+            <div className="text-xs">
+              <div className="font-semibold text-purple-400">3. Review & Merge</div>
+              <div className="text-purple-400/60">Zero conflicts</div>
+            </div>
+          </div>
+        </div>
+
+        <div className="space-y-8 stagger-fade">
           {/* Main Branch */}
           {mainBranch && (
             <section>
@@ -455,50 +489,50 @@ function BranchCard({
             )}
           </div>
 
-          <div className="flex items-center gap-2">
+          <div className="flex items-center gap-1.5 flex-wrap">
             {onEdit && (
               <button
                 onClick={onEdit}
-                className="p-2 rounded-lg hover:bg-zinc-800 text-zinc-400 hover:text-zinc-100 transition-colors"
-                title="Edit on this branch"
+                className="px-2.5 py-1.5 rounded-lg bg-zinc-800/60 hover:bg-zinc-800 text-zinc-300 hover:text-zinc-100 transition-colors text-[11px] font-medium flex items-center gap-1.5 border border-zinc-700/50"
               >
-                <Code className="w-4 h-4" />
+                <Code className="w-3.5 h-3.5" />
+                <span>Edit</span>
               </button>
             )}
             {onCompare && (
               <button
                 onClick={onCompare}
                 disabled={comparing}
-                className="p-2 rounded-lg hover:bg-zinc-800 text-zinc-400 hover:text-zinc-100 transition-colors disabled:opacity-50"
-                title="Compare with main"
+                className="px-2.5 py-1.5 rounded-lg bg-sky-500/10 hover:bg-sky-500/20 text-sky-400 hover:text-sky-300 transition-colors disabled:opacity-50 text-[11px] font-medium flex items-center gap-1.5 border border-sky-500/20"
               >
-                {comparing ? <Loader2 className="w-4 h-4 animate-spin" /> : <Eye className="w-4 h-4" />}
+                {comparing ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <Eye className="w-3.5 h-3.5" />}
+                <span>Compare</span>
               </button>
             )}
             {onMerge && (
               <button
                 onClick={onMerge}
-                className="p-2 rounded-lg hover:bg-zinc-800 text-emerald-400 hover:text-emerald-300 transition-colors"
-                title="Merge into main"
+                className="px-2.5 py-1.5 rounded-lg bg-emerald-500/10 hover:bg-emerald-500/20 text-emerald-400 hover:text-emerald-300 transition-colors text-[11px] font-medium flex items-center gap-1.5 border border-emerald-500/20"
               >
-                <GitMerge className="w-4 h-4" />
+                <GitMerge className="w-3.5 h-3.5" />
+                <span>Merge</span>
               </button>
             )}
             {onDelete && (
               <button
                 onClick={onDelete}
-                className="p-2 rounded-lg hover:bg-zinc-800 text-red-400 hover:text-red-300 transition-colors"
-                title="Delete branch"
+                className="px-2.5 py-1.5 rounded-lg bg-red-500/10 hover:bg-red-500/20 text-red-400 hover:text-red-300 transition-colors text-[11px] font-medium flex items-center gap-1.5 border border-red-500/20"
               >
-                <Trash2 className="w-4 h-4" />
+                <Trash2 className="w-3.5 h-3.5" />
+                <span>Delete</span>
               </button>
             )}
             <button
               onClick={onExpand}
-              className="p-2 rounded-lg hover:bg-zinc-800 text-zinc-400 hover:text-zinc-100 transition-colors"
-              title={isExpanded ? 'Hide commits' : 'Show commits'}
+              className="px-2.5 py-1.5 rounded-lg bg-zinc-800/60 hover:bg-zinc-800 text-zinc-400 hover:text-zinc-100 transition-colors text-[11px] font-medium flex items-center gap-1.5 border border-zinc-700/50"
             >
-              <GitCommit className="w-4 h-4" />
+              <GitCommit className="w-3.5 h-3.5" />
+              <span>{isExpanded ? 'Hide' : 'Commits'}</span>
             </button>
           </div>
         </div>

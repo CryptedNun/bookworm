@@ -17,10 +17,12 @@ import {
   ShieldCheck,
   LogOut,
   Users,
-  ChevronDown as ChevronDownIcon,
+  Compass,
+  GraduationCap,
 } from "lucide-react";
 import NotificationsDropdown from "@/components/notifications/NotificationsDropdown";
 import RoleAuditorModal from "@/components/dashboard/RoleAuditorModal";
+import CommandPalette from "@/components/dashboard/CommandPalette";
 import ThemeToggle from "@/components/theme/ThemeToggle";
 import { useRouter } from "next/navigation";
 
@@ -43,6 +45,19 @@ export function TopNav({ userId = "", currentUser, onOpenCreate }: TopNavProps) 
   const [showRoleMenu, setShowRoleMenu] = useState(false);
   const [isAuditorOpen, setIsAuditorOpen] = useState(false);
   const [isSwitchingRole, setIsSwitchingRole] = useState(false);
+  const [isPaletteOpen, setIsPaletteOpen] = useState(false);
+
+  // Global Ctrl+K shortcut listener
+  React.useEffect(() => {
+    const handleKeyDown = (e: KeyboardEvent) => {
+      if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === 'k') {
+        e.preventDefault();
+        setIsPaletteOpen((prev) => !prev);
+      }
+    };
+    window.addEventListener('keydown', handleKeyDown);
+    return () => window.removeEventListener('keydown', handleKeyDown);
+  }, []);
 
   const handleRoleSwitch = async (email: string) => {
     setIsSwitchingRole(true);
@@ -112,26 +127,42 @@ export function TopNav({ userId = "", currentUser, onOpenCreate }: TopNavProps) 
               className="flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg hover:bg-zinc-900 hover:text-zinc-100 transition-colors text-xs font-semibold cursor-pointer"
             >
               <BookMarked className="w-3.5 h-3.5 text-purple-400" />
-              <span>Notebooks & Editions</span>
+              <span>Notebooks</span>
             </button>
+
+            <Link
+              href="/explore"
+              className="flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg hover:bg-zinc-900 hover:text-zinc-100 transition-colors text-xs font-semibold"
+            >
+              <Compass className="w-3.5 h-3.5 text-amber-400" />
+              <span>Explore</span>
+            </Link>
+
+            <Link
+              href="/evaluation"
+              className="flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg hover:bg-zinc-900 hover:text-zinc-100 transition-colors text-xs font-semibold"
+              title="System Architecture & Database Evaluation Showcase"
+            >
+              <GraduationCap className="w-3.5 h-3.5 text-emerald-400" />
+              <span>Evaluation</span>
+            </Link>
           </nav>
         </div>
 
-        {/* Center: Search Bar */}
+        {/* Center: Search Bar Triggering Command Palette */}
         <div className="flex-1 max-w-md hidden sm:block">
-          <div className="relative">
-            <div className="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none text-zinc-500">
+          <div 
+            onClick={() => setIsPaletteOpen(true)}
+            className="relative cursor-pointer group"
+          >
+            <div className="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none text-zinc-500 group-hover:text-emerald-400 transition-colors">
               <Search className="w-3.5 h-3.5" />
             </div>
-            <input
-              type="text"
-              value={searchQuery}
-              onChange={(e) => setSearchQuery(e.target.value)}
-              placeholder="Search or jump to notes, notebooks, issues, blocks..."
-              className="w-full pl-9 pr-14 py-1.5 text-xs rounded-lg bg-zinc-900/80 border border-zinc-800 text-zinc-100 placeholder-zinc-500 focus:outline-none focus:ring-1 focus:ring-emerald-500/50 focus:border-emerald-500/50 transition-all font-sans"
-            />
+            <div className="w-full pl-9 pr-14 py-1.5 text-xs rounded-lg bg-zinc-900/80 border border-zinc-800 text-zinc-400 group-hover:border-zinc-700 transition-all font-sans flex items-center select-none">
+              <span>Search or jump to notes, notebooks, blocks...</span>
+            </div>
             <div className="absolute inset-y-0 right-0 pr-2 flex items-center pointer-events-none">
-              <kbd className="text-[10px] uppercase font-mono px-1.5 py-0.5 rounded bg-zinc-800 border border-zinc-700 text-zinc-400">
+              <kbd className="text-[10px] uppercase font-mono px-1.5 py-0.5 rounded bg-zinc-800 border border-zinc-700 text-zinc-400 group-hover:text-zinc-200 transition-colors">
                 Ctrl K
               </kbd>
             </div>
@@ -260,7 +291,7 @@ export function TopNav({ userId = "", currentUser, onOpenCreate }: TopNavProps) 
               <span className="px-1.5 py-0.2 rounded text-[9px] font-mono bg-purple-500/15 text-purple-300 border border-purple-500/30">
                 {currentUser?.system_role || "ADMIN"}
               </span>
-              <ChevronDownIcon className="w-3 h-3 text-zinc-500" />
+              <ChevronDown className="w-3 h-3 text-zinc-500" />
             </button>
 
             {showRoleMenu && (
@@ -323,6 +354,13 @@ export function TopNav({ userId = "", currentUser, onOpenCreate }: TopNavProps) 
         isOpen={isAuditorOpen}
         onClose={() => setIsAuditorOpen(false)}
         currentUser={currentUser}
+      />
+
+      {/* Global Command Palette */}
+      <CommandPalette
+        isOpen={isPaletteOpen}
+        onClose={() => setIsPaletteOpen(false)}
+        onOpenCreate={onOpenCreate}
       />
     </header>
   );

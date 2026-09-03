@@ -17,6 +17,8 @@
 -- ---------------------------------------------------------------------
 -- 0. TEARDOWN (Clean Slate)
 -- ---------------------------------------------------------------------
+DROP TABLE IF EXISTS issue_comments CASCADE;
+DROP TABLE IF EXISTS user_starred_resources CASCADE;
 DROP TABLE IF EXISTS notifications CASCADE;
 DROP TABLE IF EXISTS access_requests CASCADE;
 DROP TABLE IF EXISTS collaborator_roles CASCADE;
@@ -279,6 +281,26 @@ CREATE TABLE issue_contributors (
     assigned_at     TIMESTAMPTZ NOT NULL DEFAULT now(),
     PRIMARY KEY (issue_id, contributor_id)
 );
+
+CREATE TABLE issue_comments (
+    comment_id  UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    issue_id    UUID NOT NULL REFERENCES issues(issue_id) ON DELETE CASCADE,
+    author_id   UUID NOT NULL REFERENCES users(user_id) ON DELETE CASCADE,
+    content     TEXT NOT NULL,
+    created_at  TIMESTAMPTZ NOT NULL DEFAULT now(),
+    updated_at  TIMESTAMPTZ
+);
+
+CREATE INDEX idx_issue_comments_issue_created ON issue_comments (issue_id, created_at ASC);
+
+CREATE TABLE user_starred_resources (
+    user_id     UUID NOT NULL REFERENCES users(user_id) ON DELETE CASCADE,
+    resource_id UUID NOT NULL REFERENCES resources(resource_id) ON DELETE CASCADE,
+    created_at  TIMESTAMPTZ NOT NULL DEFAULT now(),
+    PRIMARY KEY (user_id, resource_id)
+);
+
+CREATE INDEX idx_user_starred_user_created ON user_starred_resources (user_id, created_at DESC);
 
 -- =====================================================================
 -- AREA 6 — NOTIFICATIONS

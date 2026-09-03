@@ -142,6 +142,7 @@ export async function insertBlock(data: {
   noteId: string;
   prevSlotId: string | null;
   nextSlotId: string | null;
+  parentSlotId?: string | null;
   blockType: 'PARAGRAPH' | 'HEADING' | 'CODE' | 'QUOTE';
   content: string;
 }): Promise<{ success: boolean; slotId?: string; error?: string }> {
@@ -184,10 +185,10 @@ export async function insertBlock(data: {
     // Calculate new lexorank
     const newLexorank = calculateLexoRankMidpoint(prevLexorank, nextLexorank);
 
-    // Create slot
+    // Create slot with optional parent_slot_id for hierarchical nesting
     const [slot] = await sql`
       INSERT INTO logical_block_slots (note_id, parent_slot_id, lexorank_key, block_type)
-      VALUES (${data.noteId}, NULL, ${newLexorank}, ${data.blockType}::text)
+      VALUES (${data.noteId}, ${data.parentSlotId || null}, ${newLexorank}, ${data.blockType}::text)
       RETURNING slot_id
     ` as { slot_id: string }[];
 
@@ -918,5 +919,255 @@ export async function deleteBlock(data: {
       success: false,
       error: error.message || 'Failed to delete block',
     };
+  }
+}
+
+/**
+ * Update block parent hierarchy (Indent / Outdent)
+ */
+export async function setBlockParent(data: {
+  noteId: string;
+  slotId: string;
+  parentSlotId: string | null;
+}): Promise<{ success: boolean; error?: string }> {
+  try {
+    const user = await getCurrentUser();
+    if (!user) {
+      return { success: false, error: 'Authentication required' };
+    }
+
+    // Check permission
+    const [permission] = await sql`
+      SELECT role_type FROM collaborator_roles
+      WHERE resource_id = ${data.noteId}
+      AND user_id = ${user.user_id}
+      AND role_type IN ('OWNER', 'MAINTAINER')
+    ` as { role_type: string }[];
+
+    if (!permission) {
+      return { success: false, error: 'Insufficient permissions' };
+    }
+
+    // Avoid self-parenting
+    if (data.parentSlotId && data.parentSlotId === data.slotId) {
+      return { success: false, error: 'A block cannot be its own parent' };
+    }
+
+    await sql`
+      UPDATE logical_block_slots
+      SET parent_slot_id = ${data.parentSlotId}
+      WHERE slot_id = ${data.slotId} AND note_id = ${data.noteId}
+    `;
+
+    revalidatePath(`/dashboard/notebooks/${data.noteId}`);
+    return { success: true };
+  } catch (error: any) {
+    console.error('setBlockParent error:', error);
+    return { success: false, error: error.message || 'Failed to update parent hierarchy' };
+  }
+}
+
+export interface BlockVersionHistoryItem {
+  version_id: string;
+  slot_id: string;
+  author_id: string;
+  author_username: string;
+  author_avatar_url: string | null;
+  content_text: string;
+  sha256: string;
+  byte_size: number;
+  created_at: string;
+}
+
+/**
+ * Fetch chronological version history of a block ("Blame" / Revision Timeline)
+ */
+export async function getBlockHistory(
+  slotId: string
+): Promise<{ success: boolean; history?: BlockVersionHistoryItem[]; error?: string }> {
+  try {
+    const history = await sql`
+      SELECT 
+        bvc.version_id,
+        bvc.slot_id,
+        bvc.author_id,
+        u.username as author_username,
+        u.avatar_url as author_avatar_url,
+        cb.content_text,
+        cb.sha256,
+        cb.byte_size,
+        bvc.created_at
+      FROM block_version_contents bvc
+      JOIN content_blobs cb ON cb.sha256 = bvc.content_blob_hash
+      JOIN users u ON u.user_id = bvc.author_id
+      WHERE bvc.slot_id = ${slotId}
+      ORDER BY bvc.created_at DESC
+    ` as BlockVersionHistoryItem[];
+
+    return { success: true, history };
+  } catch (error: any) {
+    console.error('getBlockHistory error:', error);
+    return { success: false, error: error.message || 'Failed to fetch block history' };
+  }
+}
+
+/**
+ * Restore an earlier historical version of a block
+ */
+export async function restoreBlockVersion(data: {
+  noteId: string;
+  slotId: string;
+  versionId: string;
+}): Promise<{ success: boolean; error?: string }> {
+  try {
+    const user = await getCurrentUser();
+    if (!user) {
+      return { success: false, error: 'Authentication required' };
+    }
+
+    // Check permission
+    const [permission] = await sql`
+      SELECT role_type FROM collaborator_roles
+      WHERE resource_id = ${data.noteId}
+      AND user_id = ${user.user_id}
+      AND role_type IN ('OWNER', 'MAINTAINER')
+    ` as { role_type: string }[];
+
+    if (!permission) {
+      return { success: false, error: 'Insufficient permissions' };
+    }
+
+    // Verify version belongs to this slot
+    const [version] = await sql`
+      SELECT version_id, content_blob_hash 
+      FROM block_version_contents
+      WHERE version_id = ${data.versionId} AND slot_id = ${data.slotId}
+    ` as { version_id: string; content_blob_hash: string }[];
+
+    if (!version) {
+      return { success: false, error: 'Target version not found for this block' };
+    }
+
+    // Get main branch
+    const [branch] = await sql`
+      SELECT branch_id FROM branches
+      WHERE note_id = ${data.noteId} AND is_main = TRUE
+      LIMIT 1
+    ` as { branch_id: string }[];
+
+    if (!branch) {
+      return { success: false, error: 'Note has no main branch' };
+    }
+
+    // Get latest commit
+    const [latestCommit] = await sql`
+      SELECT commit_id FROM commits
+      WHERE branch_id = ${branch.branch_id}
+      ORDER BY created_at DESC
+      LIMIT 1
+    ` as { commit_id: string }[];
+
+    // Create restore commit
+    const commitHash = hashContent(JSON.stringify({
+      branch_id: branch.branch_id,
+      author_id: user.user_id,
+      timestamp: Date.now(),
+      action: 'restore_version',
+      slot_id: data.slotId,
+      version_id: data.versionId,
+    }));
+
+    const [newCommit] = await sql`
+      INSERT INTO commits (
+        branch_id,
+        parent_commit_id,
+        author_id,
+        commit_message,
+        commit_hash
+      )
+      VALUES (
+        ${branch.branch_id},
+        ${latestCommit.commit_id},
+        ${user.user_id},
+        ${'Revert block to version ' + data.versionId.substring(0, 8)},
+        ${commitHash}
+      )
+      RETURNING commit_id
+    ` as { commit_id: string }[];
+
+    // Copy manifest with restored version pointer
+    await sql`
+      INSERT INTO commit_manifests (commit_id, slot_id, version_id)
+      SELECT 
+        ${newCommit.commit_id},
+        cm.slot_id,
+        CASE 
+          WHEN cm.slot_id = ${data.slotId} THEN ${data.versionId}::uuid
+          ELSE cm.version_id
+        END
+      FROM commit_manifests cm
+      WHERE cm.commit_id = ${latestCommit.commit_id}
+    `;
+
+    revalidatePath(`/dashboard/notebooks/${data.noteId}`);
+    return { success: true };
+  } catch (error: any) {
+    console.error('restoreBlockVersion error:', error);
+    return { success: false, error: error.message || 'Failed to restore block version' };
+  }
+}
+
+/**
+ * Rebalance LexoRank keys for a note (FAQ Q7 in bookworm.md)
+ * Redistributes keys cleanly spaced across generation 1: 1|100000, 1|200000, etc.
+ */
+export async function rebalanceNoteBlocks(
+  noteId: string
+): Promise<{ success: boolean; count?: number; error?: string }> {
+  try {
+    const user = await getCurrentUser();
+    if (!user) {
+      return { success: false, error: 'Authentication required' };
+    }
+
+    const [permission] = await sql`
+      SELECT role_type FROM collaborator_roles
+      WHERE resource_id = ${noteId}
+      AND user_id = ${user.user_id}
+      AND role_type IN ('OWNER', 'MAINTAINER')
+    ` as { role_type: string }[];
+
+    if (!permission) {
+      return { success: false, error: 'Insufficient permissions to rebalance note' };
+    }
+
+    // Fetch all slots ordered by current lexorank
+    const slots = await sql`
+      SELECT slot_id, lexorank_key
+      FROM logical_block_slots
+      WHERE note_id = ${noteId}
+      ORDER BY lexorank_key ASC
+    ` as { slot_id: string; lexorank_key: string }[];
+
+    if (slots.length === 0) {
+      return { success: true, count: 0 };
+    }
+
+    // Calculate evenly spaced keys
+    const STEP = 100000;
+    for (let i = 0; i < slots.length; i++) {
+      const newKey = `1|${((i + 1) * STEP).toString().padStart(6, '0')}`;
+      await sql`
+        UPDATE logical_block_slots
+        SET lexorank_key = ${newKey}
+        WHERE slot_id = ${slots[i].slot_id}
+      `;
+    }
+
+    revalidatePath(`/dashboard/notebooks/${noteId}`);
+    return { success: true, count: slots.length };
+  } catch (error: any) {
+    console.error('rebalanceNoteBlocks error:', error);
+    return { success: false, error: error.message || 'Failed to rebalance blocks' };
   }
 }

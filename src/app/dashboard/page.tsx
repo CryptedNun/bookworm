@@ -7,6 +7,7 @@
 import { getCurrentUserWithStats } from '@/actions/auth';
 import { getUserNotebooks } from '@/actions/notebooks';
 import { getDashboardOverview } from '@/actions/dashboard';
+import { getUserStarredResources } from '@/actions/stars';
 import { redirect } from 'next/navigation';
 import DashboardClient from './dashboard-client';
 
@@ -33,6 +34,10 @@ export default async function DashboardPage() {
   const analytics = overviewResult.analytics;
   const activities = overviewResult.activities || [];
 
+  // Fetch user's starred resources
+  const starredResult = await getUserStarredResources(user.user_id);
+  const starredItems = starredResult.success && starredResult.items ? starredResult.items : [];
+
   // Pass real user data, notebooks, and overview to client component
   return (
     <DashboardClient 
@@ -43,6 +48,7 @@ export default async function DashboardPage() {
       userRoles={userRoles}
       analytics={analytics}
       activities={activities}
+      starredItems={starredItems}
     />
   );
 }

@@ -22,6 +22,7 @@ import { mergeBranch } from '@/actions/branches';
 import type { Issue } from '@/actions/issues';
 import type { User as AuthUser } from '@/actions/auth';
 import type { Note } from '@/actions/notes';
+import IssueCommentsThread from '@/components/issues/IssueCommentsThread';
 
 interface Block {
   slot_id: string;
@@ -345,6 +346,8 @@ export default function IssuesClient({
                 canContribute={canCreateIssue}
                 canClose={issue.creator_id === user.user_id || ['OWNER', 'MAINTAINER'].includes(note.role_type)}
                 isContributing={contributingIssueId === issue.issue_id}
+                currentUserId={user.user_id}
+                isOwnerOrMaintainer={['OWNER', 'MAINTAINER'].includes(note.role_type)}
                 onContribute={() => handleContributeToIssue(issue.issue_id)}
                 onClose={() => handleCloseIssue(issue.issue_id, issue.title)}
                 onMerge={handleMergeBranch}
@@ -504,6 +507,8 @@ function IssueCard({
   canContribute,
   canClose,
   isContributing,
+  currentUserId,
+  isOwnerOrMaintainer,
   onContribute,
   onClose,
   onMerge,
@@ -515,6 +520,8 @@ function IssueCard({
   canContribute: boolean;
   canClose: boolean;
   isContributing: boolean;
+  currentUserId: string;
+  isOwnerOrMaintainer: boolean;
   onContribute: () => void;
   onClose: () => void;
   onMerge: (branchId: string, title: string) => void;
@@ -612,6 +619,13 @@ function IssueCard({
           <p className="text-sm text-zinc-300 line-clamp-3">{issue.target_block_content}</p>
         </div>
       )}
+
+      {/* Discussion & Review Comments Thread */}
+      <IssueCommentsThread
+        issueId={issue.issue_id}
+        currentUserId={currentUserId}
+        isOwnerOrMaintainer={isOwnerOrMaintainer}
+      />
     </div>
   );
 }

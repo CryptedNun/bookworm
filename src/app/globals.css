@@ -105,6 +105,59 @@ button:active:not(:disabled),
   transform-origin: top right;
 }
 
+/* 3. Page Entrance Animation */
+@keyframes page-in {
+  from {
+    opacity: 0;
+    transform: translateY(8px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+.animate-page-in {
+  animation: page-in 350ms var(--ease-out) forwards;
+}
+
+/* 4. Simple Fade-In */
+@keyframes fade-in {
+  from { opacity: 0; }
+  to { opacity: 1; }
+}
+
+.animate-fade-in {
+  animation: fade-in 300ms var(--ease-out) forwards;
+}
+
+/* 5. Stagger-Fade for Sequential List Items */
+.stagger-fade > * {
+  opacity: 0;
+  animation: page-in 300ms var(--ease-out) forwards;
+}
+.stagger-fade > *:nth-child(1) { animation-delay: 0ms; }
+.stagger-fade > *:nth-child(2) { animation-delay: 40ms; }
+.stagger-fade > *:nth-child(3) { animation-delay: 80ms; }
+.stagger-fade > *:nth-child(4) { animation-delay: 120ms; }
+.stagger-fade > *:nth-child(5) { animation-delay: 160ms; }
+.stagger-fade > *:nth-child(6) { animation-delay: 200ms; }
+.stagger-fade > *:nth-child(7) { animation-delay: 240ms; }
+.stagger-fade > *:nth-child(8) { animation-delay: 280ms; }
+.stagger-fade > *:nth-child(9) { animation-delay: 320ms; }
+.stagger-fade > *:nth-child(10) { animation-delay: 360ms; }
+.stagger-fade > *:nth-child(n+11) { animation-delay: 400ms; }
+
+/* 6. Subtle Pulse for Selected Items */
+@keyframes subtle-glow {
+  0%, 100% { box-shadow: 0 0 8px rgba(16, 185, 129, 0.15); }
+  50% { box-shadow: 0 0 20px rgba(16, 185, 129, 0.3); }
+}
+
+.animate-subtle-glow {
+  animation: subtle-glow 2.5s ease-in-out infinite;
+}
+
 /* =========================================================
    Apple Frosted Glass & Floating Shadows (Dark Mode)
    ========================================================= */
