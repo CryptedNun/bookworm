@@ -137,3 +137,10 @@
   4. Sign in as `user_2` and visit `/dashboard`.
   5. Verify the **Collaboration Invitation** banner appears at the top.
   6. Click **Accept Invitation**; verify the notebook now appears in `user_2`'s sidebar.
+
+More Issues:
+- Contributor cannot create issues on blocks despite having contributor access, presumably after a merge, contributors cannot make more issues.
+
+- "Explore" button for seeing public editions, notebooks and notes is missing in the dashboard.
+
+- 
