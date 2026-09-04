@@ -504,7 +504,8 @@ interface BTreeNode<K, V> {
 -- Block Version Contents
 INSERT INTO block_version_contents (version_id, slot_id, author_id, content_blob_hash, created_at) VALUES
   ('a50e8400-e29b-41d4-a716-446655440001', '950e8400-e29b-41d4-a716-446655440001', '550e8400-e29b-41d4-a716-446655440001', encode(digest('B-Trees & Page-Structured Storage Engines', 'sha256'), 'hex'), '2026-01-11 10:30:00+00'),
-  ('a50e8400-e29b-41d4-a716-446655440002', '950e8400-e29b-41d4-a716-446655440002', '550e8400-e29b-41d4-a716-446655440001', encode(digest('B-Trees generalize binary search trees by allowing nodes with more than two children. Unlike self-balancing binary search trees (AVL or Red-Black), B-Trees are optimized for systems that read and write large blocks of memory, minimizing expensive disk I/O operations.', 'sha256'), 'hex'), '2026-01-11 10:30:00+00'),
+  ('a50e8400-e29b-41d4-a716-446655440002', '950e840production-grade demo dataset
+-- Run top-to-bottom to recreate and seed the entire database.0-e29b-41d4-a716-446655440002', '550e8400-e29b-41d4-a716-446655440001', encode(digest('B-Trees generalize binary search trees by allowing nodes with more than two children. Unlike self-balancing binary search trees (AVL or Red-Black), B-Trees are optimized for systems that read and write large blocks of memory, minimizing expensive disk I/O operations.', 'sha256'), 'hex'), '2026-01-11 10:30:00+00'),
   ('a50e8400-e29b-41d4-a716-446655440003', '950e8400-e29b-41d4-a716-446655440003', '550e8400-e29b-41d4-a716-446655440001', encode(digest('// B-Tree Node Structure in TypeScript
 interface BTreeNode<K, V> {
   isLeaf: boolean;
