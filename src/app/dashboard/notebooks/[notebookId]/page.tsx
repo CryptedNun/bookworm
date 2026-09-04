@@ -5,7 +5,7 @@
  * with beautiful markdown rendering
  */
 
-import { getNotebook } from '@/actions/notebooks';
+import { getNotebook, getUserNotebooks } from '@/actions/notebooks';
 import type { Notebook } from '@/actions/notebooks';
 import { getNotebookNotesWithContent } from '@/actions/notes';
 import type { Note } from '@/actions/notes';
@@ -37,11 +37,16 @@ export default async function NotebookPage({ params }: PageProps) {
   const notesResult = await getNotebookNotesWithContent(notebookId);
   const notes = (notesResult.success ? notesResult.notes || [] : []) as unknown as Array<Note & { content: string }>;
 
+  // Fetch user notebooks for zero-cost forking
+  const userNotebooksResult = await getUserNotebooks();
+  const userNotebooks = userNotebooksResult.success && userNotebooksResult.notebooks ? userNotebooksResult.notebooks : [];
+
   return (
     <NotebookReader 
       notebook={notebookResult.notebook as Notebook} 
       notes={notes}
       user={user}
+      userNotebooks={userNotebooks}
     />
   );
 }

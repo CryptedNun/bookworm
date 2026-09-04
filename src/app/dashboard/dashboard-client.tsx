@@ -43,6 +43,7 @@ import {
   Eye,
   Edit,
   ArrowRight,
+  Compass,
 } from "lucide-react";
 import VersionControlGuide from "@/components/dashboard/VersionControlGuide";
 import UnmergedBranchesWidget from "@/components/dashboard/UnmergedBranchesWidget";
@@ -234,6 +235,31 @@ export function LeftSidebar({
             <Settings className="w-4 h-4" />
           </div>
         </button>
+      </div>
+
+      {/* Explore Community Navigation Card */}
+      <div className="px-3.5 pb-2">
+        <Link
+          href="/explore"
+          className="flex items-center justify-between p-2.5 rounded-xl bg-gradient-to-r from-amber-500/10 via-orange-500/10 to-amber-500/5 border border-amber-500/20 hover:border-amber-500/40 text-amber-300 text-xs font-semibold transition-all group shadow-sm hover:shadow-amber-500/10"
+          title="Discover open study materials, published editions, and fork notes"
+        >
+          <div className="flex items-center gap-2.5">
+            <div className="p-1.5 rounded-lg bg-amber-500/20 text-amber-400 group-hover:scale-105 transition-transform">
+              <Compass className="w-4 h-4" />
+            </div>
+            <div>
+              <div className="text-zinc-100 text-xs font-bold flex items-center gap-1.5">
+                <span>Explore Community</span>
+                <span className="text-[9px] font-mono px-1 py-0.2 rounded bg-amber-500/20 text-amber-300 border border-amber-500/30">
+                  PUBLIC
+                </span>
+              </div>
+              <div className="text-[10px] text-amber-400/80 font-normal">Editions, notes & CAS forks</div>
+            </div>
+          </div>
+          <ArrowRight className="w-3.5 h-3.5 text-amber-400/60 group-hover:translate-x-0.5 group-hover:text-amber-300 transition-all" />
+        </Link>
       </div>
 
       {/* 2. BENEATH PROFILE: Notes and Notebooks Explorer Header */}
@@ -1782,20 +1808,23 @@ export default function DashboardClient({
       />
 
       {/* Zero-Cost Fork Note Modal */}
-      {firstNote && (
-        <ForkNoteModal
-          noteId={firstNote.note_id}
-          noteTitle={firstNote.title}
-          userId={user.user_id}
-          userNotebooks={notebooks.map(nb => ({
-            notebook_id: nb.notebook_id,
-            title: nb.title,
-            role_type: userRoles.find(r => r.notebook_id === nb.notebook_id)?.role_type || nb.role_type || (nb.owner_id === user.user_id ? 'OWNER' : 'CONTRIBUTOR'),
-          }))}
-          isOpen={isForkOpen}
-          onClose={() => setIsForkOpen(false)}
-        />
-      )}
+      <ForkNoteModal
+        noteId={firstNote?.note_id || ''}
+        noteTitle={firstNote?.title || ''}
+        userId={user.user_id}
+        availableNotes={dashboardNotes.map((dn) => ({
+          note_id: dn.note_id,
+          title: dn.title,
+          notebook_title: notebooks.find(nb => nb.notebook_id === dn.notebook_id)?.title,
+        }))}
+        userNotebooks={notebooks.map(nb => ({
+          notebook_id: nb.notebook_id,
+          title: nb.title,
+          role_type: userRoles.find(r => r.notebook_id === nb.notebook_id)?.role_type || nb.role_type || (nb.owner_id === user.user_id ? 'OWNER' : 'CONTRIBUTOR'),
+        }))}
+        isOpen={isForkOpen}
+        onClose={() => setIsForkOpen(false)}
+      />
     </div>
   );
 }

@@ -17,6 +17,7 @@ import {
   ShieldCheck,
   LogOut,
   Users,
+  Compass,
 } from "lucide-react";
 import NotificationsDropdown from "@/components/notifications/NotificationsDropdown";
 import RoleAuditorModal from "@/components/dashboard/RoleAuditorModal";
@@ -121,7 +122,14 @@ export function TopNav({ userId = "", currentUser, onOpenCreate }: TopNavProps) 
               <span>Notebooks</span>
             </button>
 
-
+            <Link
+              href="/explore"
+              className="flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg hover:bg-zinc-900 hover:text-zinc-100 transition-colors text-xs font-semibold cursor-pointer text-zinc-300"
+              title="Explore public community notes and published editions"
+            >
+              <Compass className="w-3.5 h-3.5 text-amber-400" />
+              <span>Explore</span>
+            </Link>
           </nav>
         </div>
 
@@ -240,6 +248,18 @@ export function TopNav({ userId = "", currentUser, onOpenCreate }: TopNavProps) 
                       <div className="text-[10px] text-zinc-500">Zero-cost content clone (CAS)</div>
                     </div>
                   </button>
+
+                  <Link
+                    href="/explore"
+                    onClick={() => setShowPlusMenu(false)}
+                    className="w-full text-left px-3 py-2 flex items-center gap-2.5 hover:bg-zinc-800 hover:text-zinc-100 cursor-pointer"
+                  >
+                    <Compass className="w-3.5 h-3.5 text-amber-400" />
+                    <div>
+                      <div className="font-medium">Explore Community</div>
+                      <div className="text-[10px] text-zinc-500">Public editions, notes & forks</div>
+                    </div>
+                  </Link>
                 </div>
               </>
             )}

@@ -724,13 +724,18 @@ export async function forkNote({
   userId: string;
 }) {
   try {
-    // 1. Validate target notebook access
+    // 1. Validate target notebook access (notebook owner or OWNER/MAINTAINER collaborator)
     const [notebookAccess] = await sql`
-      SELECT role_type 
-      FROM collaborator_roles 
-      WHERE resource_id = ${targetNotebookId}
-        AND user_id = ${userId}
-        AND role_type IN ('OWNER', 'MAINTAINER')
+      SELECT nb.notebook_id
+      FROM notebooks nb
+      LEFT JOIN collaborator_roles cr ON cr.resource_id = nb.notebook_id AND cr.user_id = ${userId}
+      WHERE nb.notebook_id = ${targetNotebookId}
+        AND nb.deleted_at IS NULL
+        AND (
+          nb.owner_id = ${userId}
+          OR cr.role_type IN ('OWNER', 'MAINTAINER')
+        )
+      LIMIT 1
     `;
 
     if (!notebookAccess) {
@@ -762,13 +767,25 @@ export async function forkNote({
       return { success: false, error: 'Source note main branch not found' };
     }
 
-    const [latestCommit] = await sql`
+    let [latestCommit] = await sql`
       SELECT c.commit_id
       FROM commits c
       WHERE c.branch_id = ${sourceMain.branch_id}
+        AND EXISTS (SELECT 1 FROM commit_manifests cm WHERE cm.commit_id = c.commit_id)
       ORDER BY c.created_at DESC
       LIMIT 1
     `;
+
+    if (!latestCommit) {
+      const [anyCommit] = await sql`
+        SELECT c.commit_id
+        FROM commits c
+        WHERE c.branch_id = ${sourceMain.branch_id}
+        ORDER BY c.created_at DESC
+        LIMIT 1
+      `;
+      latestCommit = anyCommit;
+    }
 
     // 4. Fetch source blocks from latest commit manifest
     let sourceManifest: Array<{
@@ -941,6 +958,7 @@ export async function forkNote({
           ${entry.slot_id},
           ${entry.version_id}
         )
+        ON CONFLICT (commit_id, slot_id) DO UPDATE SET version_id = EXCLUDED.version_id
       `;
     }
 

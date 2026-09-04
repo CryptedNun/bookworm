@@ -382,11 +382,13 @@ export async function mergeBranch({
 
       // Insert merged manifest
       if (mergedManifest.length > 0) {
-        const values = mergedManifest.map(m => `('${mergeCommit.commit_id}', '${m.slot_id}', '${m.version_id}')`).join(',');
-        await sql.unsafe(`
-          INSERT INTO commit_manifests (commit_id, slot_id, version_id)
-          VALUES ${values}
-        `);
+        for (const m of mergedManifest) {
+          await sql`
+            INSERT INTO commit_manifests (commit_id, slot_id, version_id)
+            VALUES (${mergeCommit.commit_id}, ${m.slot_id}, ${m.version_id})
+            ON CONFLICT (commit_id, slot_id) DO UPDATE SET version_id = EXCLUDED.version_id
+          `;
+        }
       }
 
       // Mark branch as merged

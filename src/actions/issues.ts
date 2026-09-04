@@ -76,11 +76,11 @@ export async function createIssue({
     }
 
     const effectiveRole = noteAccess.role_type;
-    // Issue creation requires MAINTAINER or OWNER (Contributors attempt on existing issues)
-    if (!['OWNER', 'MAINTAINER'].includes(effectiveRole)) {
+    // Issue creation requires OWNER, MAINTAINER, or CONTRIBUTOR
+    if (!['OWNER', 'MAINTAINER', 'CONTRIBUTOR'].includes(effectiveRole)) {
       return { 
         success: false, 
-        error: 'Only Owners and Maintainers can create issues on this note. Contributors can attempt on open issues.' 
+        error: 'You need Contributor, Maintainer, or Owner access to create issues on this note.' 
       };
     }
 
@@ -152,13 +152,25 @@ export async function createIssue({
       return { success: false, error: 'Note has no main branch' };
     }
 
-    const [latestCommit] = await sql`
-      SELECT commit_id
-      FROM commits
-      WHERE branch_id = ${mainBranch.branch_id}
-      ORDER BY created_at DESC
+    let [latestCommit] = await sql`
+      SELECT c.commit_id
+      FROM commits c
+      WHERE c.branch_id = ${mainBranch.branch_id}
+        AND EXISTS (SELECT 1 FROM commit_manifests cm WHERE cm.commit_id = c.commit_id)
+      ORDER BY c.created_at DESC
       LIMIT 1
     `;
+
+    if (!latestCommit) {
+      const [anyCommit] = await sql`
+        SELECT commit_id
+        FROM commits
+        WHERE branch_id = ${mainBranch.branch_id}
+        ORDER BY created_at DESC
+        LIMIT 1
+      `;
+      latestCommit = anyCommit;
+    }
 
     if (!latestCommit) {
       // Rollback issue creation
@@ -792,13 +804,25 @@ export async function contributeToIssue(issueId: string) {
       return { success: false, error: 'Note has no canonical main branch' };
     }
 
-    const [latestCommit] = await sql`
-      SELECT commit_id
-      FROM commits
-      WHERE branch_id = ${mainBranch.branch_id}
-      ORDER BY created_at DESC
+    let [latestCommit] = await sql`
+      SELECT c.commit_id
+      FROM commits c
+      WHERE c.branch_id = ${mainBranch.branch_id}
+        AND EXISTS (SELECT 1 FROM commit_manifests cm WHERE cm.commit_id = c.commit_id)
+      ORDER BY c.created_at DESC
       LIMIT 1
     `;
+
+    if (!latestCommit) {
+      const [anyCommit] = await sql`
+        SELECT commit_id
+        FROM commits
+        WHERE branch_id = ${mainBranch.branch_id}
+        ORDER BY created_at DESC
+        LIMIT 1
+      `;
+      latestCommit = anyCommit;
+    }
 
     if (!latestCommit) {
       return { success: false, error: 'Main branch has no commits' };

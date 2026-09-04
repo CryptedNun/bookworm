@@ -1,6 +1,6 @@
 'use client';
 
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { useRouter } from 'next/navigation';
 import { 
   GitFork, 
@@ -11,40 +11,82 @@ import {
   ArrowRight,
   BookOpen,
   Sparkles,
-  ShieldCheck
+  ShieldCheck,
+  Folder
 } from 'lucide-react';
 import { forkNote } from '@/actions/notes';
 
 interface ForkNoteModalProps {
-  noteId: string;
-  noteTitle: string;
+  noteId?: string;
+  noteTitle?: string;
   userId: string;
   userNotebooks: Array<{ notebook_id: string; title: string; role_type?: string }>;
+  availableNotes?: Array<{ note_id: string; title: string; notebook_title?: string }>;
   isOpen: boolean;
   onClose: () => void;
 }
 
 export default function ForkNoteModal({
-  noteId,
-  noteTitle,
+  noteId = '',
+  noteTitle = '',
   userId,
-  userNotebooks,
+  userNotebooks = [],
+  availableNotes,
   isOpen,
   onClose,
 }: ForkNoteModalProps) {
   const router = useRouter();
-  const [selectedNotebookId, setSelectedNotebookId] = useState(
-    userNotebooks[0]?.notebook_id || ''
+
+  // Filter notebooks where user has write permission (OWNER or MAINTAINER)
+  const writableNotebooks = userNotebooks.filter(
+    (nb) => !nb.role_type || ['OWNER', 'MAINTAINER'].includes(nb.role_type)
   );
-  const [forkTitle, setForkTitle] = useState(`${noteTitle} (Fork)`);
+
+  const [activeNoteId, setActiveNoteId] = useState(noteId || availableNotes?.[0]?.note_id || '');
+  const [activeNoteTitle, setActiveNoteTitle] = useState(noteTitle || availableNotes?.[0]?.title || 'Note');
+  const [selectedNotebookId, setSelectedNotebookId] = useState(
+    writableNotebooks[0]?.notebook_id || userNotebooks[0]?.notebook_id || ''
+  );
+  const [forkTitle, setForkTitle] = useState(`${activeNoteTitle} (Fork)`);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [successResult, setSuccessResult] = useState<{ noteId: string; notebookId: string } | null>(null);
+
+  // Sync state whenever modal opens or props change
+  useEffect(() => {
+    if (isOpen) {
+      const currentNoteId = noteId || availableNotes?.[0]?.note_id || '';
+      const currentNoteTitle = noteTitle || availableNotes?.[0]?.title || 'Note';
+      setActiveNoteId(currentNoteId);
+      setActiveNoteTitle(currentNoteTitle);
+      setForkTitle(`${currentNoteTitle} (Fork)`);
+
+      const targetNb = writableNotebooks[0] || userNotebooks[0];
+      if (targetNb) {
+        setSelectedNotebookId(targetNb.notebook_id);
+      }
+      setError(null);
+      setSuccessResult(null);
+    }
+  }, [isOpen, noteId, noteTitle, userNotebooks.length]);
+
+  const handleSourceNoteChange = (newNoteId: string) => {
+    setActiveNoteId(newNoteId);
+    const found = availableNotes?.find(n => n.note_id === newNoteId);
+    if (found) {
+      setActiveNoteTitle(found.title);
+      setForkTitle(`${found.title} (Fork)`);
+    }
+  };
 
   if (!isOpen) return null;
 
   const handleFork = async (e: React.FormEvent) => {
     e.preventDefault();
+    if (!activeNoteId) {
+      setError('Please select a source note to fork');
+      return;
+    }
     if (!selectedNotebookId) {
       setError('Please select a destination notebook');
       return;
@@ -55,7 +97,7 @@ export default function ForkNoteModal({
 
     try {
       const res = await forkNote({
-        noteId,
+        noteId: activeNoteId,
         targetNotebookId: selectedNotebookId,
         newTitle: forkTitle,
         userId,
@@ -135,11 +177,29 @@ export default function ForkNoteModal({
               </div>
             )}
 
+            {/* If choosing among available notes (e.g. triggered from topnav/dashboard) */}
+            {availableNotes && availableNotes.length > 1 && (
+              <div className="space-y-1.5">
+                <label className="text-xs font-semibold text-zinc-300">Select Note to Fork</label>
+                <select
+                  value={activeNoteId}
+                  onChange={(e) => handleSourceNoteChange(e.target.value)}
+                  className="w-full px-4 py-2.5 rounded-2xl bg-zinc-950/80 border border-white/[0.1] text-zinc-100 text-sm focus:outline-none focus:border-cyan-500/80 focus:ring-1 focus:ring-cyan-500/50 transition-all cursor-pointer"
+                >
+                  {availableNotes.map((n) => (
+                    <option key={n.note_id} value={n.note_id}>
+                      {n.title} {n.notebook_title ? `(${n.notebook_title})` : ''}
+                    </option>
+                  ))}
+                </select>
+              </div>
+            )}
+
             {/* Visual Forking Pipeline Graphic */}
             <div className="p-4 rounded-2xl bg-zinc-950/60 border border-white/[0.06] flex items-center justify-between gap-3 text-xs">
               <div className="flex-1 min-w-0 p-2.5 rounded-xl bg-zinc-900/60 border border-white/[0.06]">
                 <div className="text-[10px] text-zinc-500 uppercase tracking-wider font-semibold">Source Note</div>
-                <div className="font-semibold text-zinc-200 truncate mt-0.5">{noteTitle}</div>
+                <div className="font-semibold text-zinc-200 truncate mt-0.5">{activeNoteTitle}</div>
               </div>
 
               <div className="flex flex-col items-center shrink-0 text-cyan-400">
@@ -168,18 +228,18 @@ export default function ForkNoteModal({
 
             {/* Target Notebook Selector */}
             <div className="space-y-1.5">
-              <label className="text-xs font-semibold text-zinc-300">Target Notebook Workspace</label>
-              {userNotebooks.length === 0 ? (
-                <p className="text-xs text-amber-400">
-                  You don't have write access to any notebooks yet. Create a notebook first to fork this note!
-                </p>
+              <label className="text-xs font-semibold text-zinc-300">Destination Notebook</label>
+              {writableNotebooks.length === 0 ? (
+                <div className="p-3 rounded-xl bg-amber-500/10 border border-amber-500/20 text-xs text-amber-300">
+                  You need a notebook where you are an <strong>Owner</strong> or <strong>Maintainer</strong> to place your forked note. Please create a notebook first!
+                </div>
               ) : (
                 <select
                   value={selectedNotebookId}
                   onChange={(e) => setSelectedNotebookId(e.target.value)}
                   className="w-full px-4 py-2.5 rounded-2xl bg-zinc-950/80 border border-white/[0.1] text-zinc-100 text-sm focus:outline-none focus:border-cyan-500/80 focus:ring-1 focus:ring-cyan-500/50 transition-all cursor-pointer"
                 >
-                  {userNotebooks.map((nb) => (
+                  {writableNotebooks.map((nb) => (
                     <option key={nb.notebook_id} value={nb.notebook_id}>
                       {nb.title} {nb.role_type ? `(${nb.role_type})` : ''}
                     </option>
@@ -211,7 +271,7 @@ export default function ForkNoteModal({
 
               <button
                 type="submit"
-                disabled={loading || userNotebooks.length === 0}
+                disabled={loading || writableNotebooks.length === 0 || !activeNoteId}
                 className="px-5 py-2.5 rounded-xl bg-cyan-500 hover:bg-cyan-400 disabled:opacity-50 text-zinc-950 text-xs font-bold transition-all flex items-center gap-2 shadow-lg shadow-cyan-500/20 cursor-pointer"
               >
                 {loading ? (

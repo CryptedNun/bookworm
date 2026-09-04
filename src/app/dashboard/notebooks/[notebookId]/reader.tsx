@@ -15,6 +15,7 @@ import {
   Home,
 } from 'lucide-react';
 import RobustMarkdown from '@/components/markdown/RobustMarkdown';
+import ForkNoteButton from '@/components/notes/ForkNoteButton';
 import type { Notebook } from '@/actions/notebooks';
 import type { Note } from '@/actions/notes';
 import type { User } from '@/actions/auth';
@@ -23,9 +24,10 @@ interface NotebookReaderProps {
   notebook: Notebook;
   notes: Array<Note & { content: string }>;
   user: User;
+  userNotebooks?: Array<{ notebook_id: string; title: string; role_type?: string }>;
 }
 
-export default function NotebookReader({ notebook, notes, user }: NotebookReaderProps) {
+export default function NotebookReader({ notebook, notes, user, userNotebooks = [] }: NotebookReaderProps) {
   const [showTOC, setShowTOC] = useState(true);
   const [activeNoteId, setActiveNoteId] = useState<string | null>(null);
 
@@ -179,6 +181,14 @@ export default function NotebookReader({ notebook, notes, user }: NotebookReader
                         <h1 className="text-4xl font-bold text-zinc-100">{note.title}</h1>
                       </div>
                       <div className="flex items-center gap-2">
+                        {/* Zero-Cost Fork Button */}
+                        <ForkNoteButton
+                          noteId={note.note_id}
+                          noteTitle={note.title}
+                          userId={user.user_id}
+                          userNotebooks={userNotebooks}
+                        />
+
                         {/* Issues & Contribute Link */}
                         <Link
                           href={`/dashboard/notebooks/${notebook.notebook_id}/notes/${note.note_id}/issues`}
