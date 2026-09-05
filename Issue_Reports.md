@@ -101,3 +101,18 @@
    - Click "Fork" on any note (from Note Viewer, Notebook Reader, or TopNav Quick Actions).
    - Select destination notebook and confirm fork.
    - Verify immediate redirect to your new independent note with identical blocks and zero extra disk storage used.
+
+Issues:
+- Non Maintainers can create issues on notes, example: issue-f8e5f288/issue-by-non-maintainter
+
+- Non-contributor and non-maintainers cannot see the user permission list of a notebook.
+
+- Using the "Code" option after highlighting a block of text reformats (Deletes the other blocks) the entire note's blocks.
+
+- Putting stars on notebooks does nothing, as in the amount of stars is not shown nor emphasised anywhere.
+
+- (NOT AN ERROR, A CRITICAL DESIGN QUESTION) Are maintainers/owners supposed to create issues and let only contributors handle that issue? Because maintainers/owners cannot edit on the issues created.
+
+- The light mode is buggy.
+
+- In the dashboard, the option to create branches and/or forking a note does nothing for now.
