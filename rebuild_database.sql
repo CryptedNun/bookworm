@@ -5,12 +5,14 @@
 --
 -- PROJECT: BookWorm — Git-like Version Control for Structured Notes
 --
--- FILE: final_sql_schema.sql / rebuild_database.sql
--- PURPOSE: Master Database Schema & Production Warm-Up Dataset
+-- FILE: warm_up_schema.sql
+-- PURPOSE: Master Database Schema (DDL) + Detailed Production Warm-Up Dataset
+--          Contains clean teardown, 18 tables, constraints, statistical functions,
+--          triggers, stored procedures, indexes, AND complete academic seed data.
 --
--- HOW TO RENEW THE DATABASE:
+-- HOW TO INITIALIZE / RESET THE DATABASE:
 -- Run in terminal:
---   psql "$DATABASE_URL" -f final_sql_schema.sql
+--   psql "" -f warm_up_schema.sql
 -- Or copy-paste into Neon SQL Console / pgAdmin and run top-to-bottom.
 -- =====================================================================
 
@@ -39,6 +41,8 @@ DROP TABLE IF EXISTS users CASCADE;
 DROP FUNCTION IF EXISTS check_resource_is_notebook() CASCADE;
 DROP FUNCTION IF EXISTS check_resource_is_note() CASCADE;
 DROP FUNCTION IF EXISTS sync_issue_status_on_branch_merge() CASCADE;
+DROP FUNCTION IF EXISTS calculate_user_contribution_score(UUID) CASCADE;
+DROP FUNCTION IF EXISTS get_note_storage_stats(UUID) CASCADE;
 DROP PROCEDURE IF EXISTS merge_issue_branch(UUID, UUID, TEXT) CASCADE;
 DROP PROCEDURE IF EXISTS fork_note_zero_cost(UUID, UUID, UUID, TEXT, UUID) CASCADE;
 
@@ -330,6 +334,129 @@ CREATE TABLE notifications (
     related_resource_id UUID REFERENCES resources(resource_id) ON DELETE CASCADE,
     related_user_id     UUID REFERENCES users(user_id) ON DELETE SET NULL
 );
+
+-- =====================================================================
+-- COMPUTED & STATISTICAL FUNCTIONS (Scalar & Table-Valued Analytics)
+-- =====================================================================
+
+-- ---------------------------------------------------------------------
+-- Function 1: calculate_user_contribution_score
+-- Purpose: Returns a composite collaborative reputation score (integer)
+--          analogous to an academic h-index, calculated dynamically from:
+--          - Merged attempt branches (50 pts)
+--          - Authored commits (10 pts)
+--          - Issues created (15 pts)
+--          - Review comments submitted (5 pts)
+-- ---------------------------------------------------------------------
+CREATE OR REPLACE FUNCTION calculate_user_contribution_score(p_user_id UUID)
+RETURNS INT
+LANGUAGE plpgsql
+STABLE
+AS $$
+DECLARE
+    v_commits_count     INT := 0;
+    v_merged_branches   INT := 0;
+    v_issues_created    INT := 0;
+    v_comments_count    INT := 0;
+    v_score             INT := 0;
+BEGIN
+    IF NOT EXISTS (SELECT 1 FROM users WHERE user_id = p_user_id) THEN
+        RETURN 0;
+    END IF;
+
+    SELECT COUNT(*) INTO v_commits_count
+      FROM commits
+     WHERE author_id = p_user_id;
+
+    SELECT COUNT(*) INTO v_merged_branches
+      FROM branches
+     WHERE attempted_by = p_user_id
+       AND is_merged = TRUE;
+
+    SELECT COUNT(*) INTO v_issues_created
+      FROM issues
+     WHERE creator_id = p_user_id;
+
+    SELECT COUNT(*) INTO v_comments_count
+      FROM issue_comments
+     WHERE author_id = p_user_id;
+
+    v_score := (v_merged_branches * 50) + (v_commits_count * 10) + (v_issues_created * 15) + (v_comments_count * 5);
+    RETURN v_score;
+END;
+$$;
+
+-- ---------------------------------------------------------------------
+-- Function 2: get_note_storage_stats
+-- Purpose: Computes exact Content-Addressed Storage (CAS) deduplication
+--          efficiency for a note across all historical commits and slots.
+--          Returns a statistical table row:
+--          (total_slots, total_commits, raw_content_bytes,
+--           cas_stored_bytes, bytes_saved, dedup_ratio_percent)
+-- ---------------------------------------------------------------------
+CREATE OR REPLACE FUNCTION get_note_storage_stats(p_note_id UUID)
+RETURNS TABLE (
+    total_slots          INT,
+    total_commits        INT,
+    raw_content_bytes    BIGINT,
+    cas_stored_bytes     BIGINT,
+    bytes_saved          BIGINT,
+    dedup_ratio_percent  NUMERIC(5,2)
+)
+LANGUAGE plpgsql
+STABLE
+AS $$
+DECLARE
+    v_slots_count        INT := 0;
+    v_commits_count      INT := 0;
+    v_raw_bytes          BIGINT := 0;
+    v_cas_bytes          BIGINT := 0;
+    v_saved_bytes        BIGINT := 0;
+    v_ratio              NUMERIC(5,2) := 0.00;
+BEGIN
+    SELECT COUNT(*) INTO v_slots_count
+      FROM logical_block_slots
+     WHERE note_id = p_note_id;
+
+    SELECT COUNT(c.commit_id) INTO v_commits_count
+      FROM commits c
+      JOIN branches b ON b.branch_id = c.branch_id
+     WHERE b.note_id = p_note_id;
+
+    SELECT COALESCE(SUM(cb.byte_size), 0) INTO v_raw_bytes
+      FROM branches b
+      JOIN commits c ON c.branch_id = b.branch_id
+      JOIN commit_manifests cm ON cm.commit_id = c.commit_id
+      JOIN block_version_contents bvc ON bvc.version_id = cm.version_id
+      JOIN content_blobs cb ON cb.sha256 = bvc.content_blob_hash
+     WHERE b.note_id = p_note_id;
+
+    SELECT COALESCE(SUM(cb.byte_size), 0) INTO v_cas_bytes
+      FROM content_blobs cb
+     WHERE cb.sha256 IN (
+         SELECT DISTINCT bvc.content_blob_hash
+           FROM logical_block_slots s
+           JOIN block_version_contents bvc ON bvc.slot_id = s.slot_id
+          WHERE s.note_id = p_note_id
+     );
+
+    v_saved_bytes := GREATEST(v_raw_bytes - v_cas_bytes, 0);
+
+    IF v_raw_bytes > 0 THEN
+        v_ratio := ROUND(((v_saved_bytes::NUMERIC / v_raw_bytes::NUMERIC) * 100), 2);
+    ELSE
+        v_ratio := 0.00;
+    END IF;
+
+    RETURN QUERY SELECT
+        v_slots_count,
+        v_commits_count,
+        v_raw_bytes,
+        v_cas_bytes,
+        v_saved_bytes,
+        v_ratio;
+END;
+$$;
 
 -- =====================================================================
 -- CONSISTENCY TRIGGERS
@@ -751,7 +878,6 @@ CREATE INDEX idx_issue_contributors_user     ON issue_contributors (contributor_
 CREATE INDEX idx_notifications_user          ON notifications (user_id, created_at DESC);
 CREATE INDEX idx_notifications_unread        ON notifications (user_id, is_read) WHERE is_read = FALSE;
 CREATE INDEX idx_notifications_type          ON notifications (notification_type);
-
 
 -- =====================================================================
 -- PRODUCTION WARM-UP SEED DATA (ACADEMIC COLLABORATIVE WORKSPACE)

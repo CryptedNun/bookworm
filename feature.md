@@ -540,3 +540,143 @@ A: Anyone who can view the note can fork it into any destination notebook where 
 Q: How does forking work without wasting storage?
 A: CAS (Content-Addressed Storage) reuses the identical SHA-256 content blob hashes in content_blobs without duplicating any text bytes.
 ```
+
+---
+
+## 18. Complete Specification & Implementation Verification Checklist
+
+### Area 1: Users & Permissions
+- [x] **User Management (`users`)**:
+  - [x] User registration and sign-in with unique email and username.
+  - [x] Cryptographic password security: per-user salt + PBKDF2 SHA-512 password hash.
+  - [x] System-level authorization roles (`ADMIN`, `USER`).
+  - [x] Profile statistics tracking (notebooks owned, notes owned, contributions, total commits).
+  - [x] Session management via secure HTTP-only cookies.
+- [x] **Polymorphic ISA Hierarchy Supertype (`resources`)**:
+  - [x] Unified supertype `resources` table for notebooks and notes.
+  - [x] Database consistency triggers (`check_resource_is_notebook`, `check_resource_is_note`) enforcing discriminator integrity.
+  - [x] Foreign key unification allowing permissions to target any resource seamlessly.
+- [x] **Role-Based Access Control (`collaborator_roles`)**:
+  - [x] Granular role levels: `OWNER`, `MAINTAINER`, `CONTRIBUTOR`.
+  - [x] Capability overrides via JSONB (`can_create_issue`, `can_merge_branch`, `can_delete_branch`, `can_add_contributor`).
+  - [x] Role management interface with permission auditing.
+- [x] **Access Request & Invitation System (`access_requests`, `collaborator_roles`)**:
+  - [x] Bidirectional request model (`REQUEST` by prospective collaborator, `INVITE` by maintainer).
+  - [x] Direct collaborator invitations by **Email Address**, **BookWorm User UUID**, or **Username**.
+  - [x] Visible User UUID in Profile Tab & TopNav with 1-click clipboard copy for seamless sharing.
+  - [x] Direct Note-level & Notebook-level collaborator invitation modals (`InviteNoteModal`, `PermissionsManager`).
+  - [x] Audit lifecycle states: `PENDING`, `APPROVED`, `REJECTED`, `CANCELLED`.
+  - [x] Review workflow updating `collaborator_roles` automatically.
+- [x] **Notification Hub (`notifications`)**:
+  - [x] Real-time notification system with unread counters and badge indicators.
+  - [x] Notification types for access requests, approvals, denials, collaborator additions/removals, role changes, issue assignments, and branch merges.
+  - [x] Notification dismissal and mark-as-read actions.
+
+### Area 2: Organizing Content
+- [x] **Notebook Collections (`notebooks`)**:
+  - [x] Resource subtype sharing primary key with `resources(resource_id)`.
+  - [x] Attributes: `title`, `description`, `owner_id`, `visibility` (`PUBLIC`, `PRIVATE`, `SHARED`).
+  - [x] Soft delete support via `deleted_at`.
+  - [x] Drag-to-reorder notes within a notebook.
+  - [x] Notebook management page with Collaborators & Permissions tabs.
+- [x] **Document Notes (`notes`)**:
+  - [x] Resource subtype belonging to a parent notebook.
+  - [x] Display ordering within notebook (`display_order`).
+  - [x] Note visibility rules (`PUBLIC`, `PRIVATE`, `SHARED`).
+  - [x] Soft deletion support.
+- [x] **Named Snapshot Publishing (`editions`)**:
+  - [x] Creation of immutable, named snapshots (`edition_name` e.g. "v1.0", "Release 2026").
+  - [x] Pinning to specific commits (`pinned_commit_id`).
+  - [x] Custom shareable URLs with human-friendly slug codes (`share_code` e.g. `cs101-intro-v2`).
+  - [x] Default canonical edition setting per note (`default_edition_id`, `is_standard`).
+  - [x] Dedicated public reader view at `/e/[shareCode]`.
+- [x] **Dual Branch Architecture (`branches`)**:
+  - [x] Every note initialized with exactly ONE main branch (`is_main = TRUE`, `issue_id = NULL`).
+  - [x] Temporary isolated issue attempt branches (`is_main = FALSE`, `issue_id = <uuid>`, `attempted_by = <uuid>`).
+  - [x] Database check constraints ensuring XOR invariants between main and issue branches.
+  - [x] Merge selection tracking (`is_merged`, `selected_by`, `selected_at`).
+
+### Area 3: The Content Itself (3-Layer Architecture)
+- [x] **Layer 1: Structure (`logical_block_slots`)**:
+  - [x] Decouples block position in a document from its text content.
+  - [x] LexoRank fractional indexing (`lexorank_key` e.g. `1|150000`) enabling O(1) midpoint block insertions without renumbering.
+  - [x] Drag-and-drop block reordering updating LexoRank keys.
+  - [x] In-place text selection splitting creating new block slots.
+  - [x] Block types: `PARAGRAPH`, `HEADING`, `CODE`, `QUOTE`, `MATH`, `CHECKLIST`.
+  - [x] **Hierarchical Block Nesting (`parent_slot_id`)**: Parent-child relationship for sub-blocks, outlines, and collapsible sections.
+  - [x] **LexoRank Rebalancing**: Engine to re-space crowded fractional keys back to clean standard increments.
+- [x] **Layer 2: Versions (`block_version_contents`)**:
+  - [x] Immutable version record for every edit (`version_id`, `slot_id`, `author_id`, `created_at`).
+  - [x] References content blob hash rather than duplicating text.
+  - [x] Full audit trail of who edited each block and when.
+- [x] **Layer 3: Storage Engine (`content_blobs`)**:
+  - [x] Content-Addressed Storage (CAS) with SHA-256 primary key (`sha256`, `content_text`, `byte_size`).
+  - [x] Global deduplication across all notes, notebooks, and users (`ON CONFLICT DO NOTHING`).
+  - [x] Storage savings calculation comparing raw block bytes against unique CAS blob bytes.
+- [x] **Zero-Cost Note Forking**:
+  - [x] Fork any public note into your own notebook.
+  - [x] Replicates slot structures and version pointers with zero new text bytes copied.
+  - [x] Preserves lineage through `forked_from_note_id`.
+
+### Area 4: Working Together (Zero-Conflict Collaboration)
+- [x] **Block-Level Issues (`issues`)**:
+  - [x] Issues target specific document slots (`target_slot_id`).
+  - [x] **Deterministic Block Locking**: Database partial unique index (`uq_one_active_issue_per_slot`) ensuring at most ONE active issue per block at any time.
+  - [x] Lifecycle statuses: `OPEN`, `IN_PROGRESS`, `MERGED`, `CLOSED`.
+- [x] **Multi-Contributor Attempts (`issue_contributors`)**:
+  - [x] Multiple contributors assigned to an issue (`issue_contributors` junction).
+  - [x] Contributors fork parallel attempt branches for the same issue.
+- [x] **Maintainer Merge Selection & Branch Diff**:
+  - [x] Side-by-side visual diff comparison between attempt branch and main branch before merging.
+  - [x] Winning branch selection: maintainer merges chosen attempt; issue automatically transitions to `MERGED` and target block updates cleanly on main branch.
+- [x] **Issue Discussion & Review Comments (`issue_comments`)**:
+  - [x] Threaded collaborative discussions directly inside issues.
+  - [x] Wires up the system notification type `COMMENT_ADDED` to notify creators and assignees.
+
+### Area 5: Tracking Changes (Version Control)
+- [x] **Commit DAG Chain (`commits`)**:
+  - [x] Git-like commit graph with `parent_commit_id` and `merge_parent_commit_id`.
+  - [x] Content hashes generated from commit contents.
+  - [x] Commit author attribution and descriptive commit messages.
+- [x] **Ternary Commit Manifests (`commit_manifests`)**:
+  - [x] Ternary relationship connecting `(commit_id × slot_id × version_id)`.
+  - [x] O(1) single-query document assembly without walking diff trees.
+- [x] **Interactive Commit DAG / Tree Visualizer**:
+  - [x] Multi-lane graph separating main branch from issue branches.
+  - [x] Interactive historical snapshot inspector: click any historical commit to view the exact document state at that moment in time.
+
+### Elite Platform Enhancements
+- [x] **Global Command Palette & Full-Text Search (`Ctrl+K`)**: Instant keyboard-driven palette searching across notebooks, notes, content text, and issues.
+- [x] **Block-Level History & Blame Inspector**: Full author revision trail on every block with 1-click restore.
+- [x] **Hierarchical Block Indentation & Nesting (`parent_slot_id`)**: Visual tree structure and parent-child indentation in the editor.
+- [x] **Enhanced Rich Block Types**: Alert banners, interactive task lists, syntax-highlighted code blocks, and LaTeX math.
+- [x] **Public Explore & Community Discovery Showcase (`/explore`)**: Community showcase with search, filtering, and 1-click forking.
+- [x] **Starred Notes & Bookmarks System (`user_starred_resources`)**: Star favorite notes and notebooks with a dedicated dashboard view.
+- [x] **Multi-Format Note Export Suite**: Export notes to Markdown (`.md`), HTML preview, or print-optimized PDF.
+
+### Implementation Status Matrix
+
+| Feature | Architectural Area | Status | Primary Implementation |
+|---|---|---|---|
+| **Users, Salted Auth, Sessions** | Area 1 | ✅ Complete | `src/actions/auth.ts`, `users` |
+| **Resources ISA Hierarchy** | Area 1 | ✅ Complete | `clean_schema.sql`, `resources` |
+| **RBAC Roles & Capabilities** | Area 1 | ✅ Complete | `src/actions/permissions.ts`, `collaborator_roles` |
+| **Access Request Workflow** | Area 1 | ✅ Complete | `src/actions/permissions.ts`, `access_requests` |
+| **Notifications Hub** | Area 6 | ✅ Complete | `src/actions/notifications.ts`, `notifications` |
+| **Notebooks & Notes Hierarchy** | Area 2 | ✅ Complete | `src/actions/notebooks.ts`, `notes.ts` |
+| **Named Editions & Public Reader** | Area 2 | ✅ Complete | `src/actions/editions.ts`, `src/app/e/[shareCode]` |
+| **Dual Branch Architecture** | Area 5 | ✅ Complete | `src/actions/branches.ts`, `branches` |
+| **3-Layer Content Model** | Area 3 | ✅ Complete | `src/actions/blocks.ts`, `logical_block_slots` |
+| **Content-Addressed Storage (CAS)** | Area 3 | ✅ Complete | `src/actions/blocks.ts`, `content_blobs` |
+| **LexoRank O(1) Block Ordering** | Area 3 | ✅ Complete | `src/lib/lexorank.ts`, `blocks.ts` |
+| **Block Locking (Active Issue Lock)** | Area 4 | ✅ Complete | `uq_one_active_issue_per_slot`, `issues` |
+| **Zero-Cost Forking** | Area 3 | ✅ Complete | `fork_note_zero_cost`, `notes.ts` |
+| **Ternary Commit Manifests** | Area 5 | ✅ Complete | `commit_manifests`, `commits` |
+| **Branch Diff & Merge Review** | Area 5 | ✅ Complete | `merge_issue_branch`, `branches.ts` |
+| **Issue Discussion & Comments** | Area 4 | ✅ Complete | `src/actions/comments.ts`, `issue_comments` |
+| **Hierarchical Blocks (`parent_slot_id`)** | Area 3 | ✅ Complete | `src/actions/blocks.ts`, `editor.tsx` |
+| **Global Search Palette (`Ctrl+K`)** | Elite Platform | ✅ Complete | `src/actions/search.ts`, `CommandPalette.tsx` |
+| **Block Blame / History Inspector** | Elite Platform | ✅ Complete | `BlockHistoryModal.tsx`, `blocks.ts` |
+| **Note Starring & Bookmarking** | Area 6 | ✅ Complete | `src/actions/stars.ts`, `user_starred_resources` |
+| **Public Explore Showcase (`/explore`)** | Elite Platform | ✅ Complete | `src/actions/explore.ts`, `src/app/explore/` |
+```
