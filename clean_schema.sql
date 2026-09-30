@@ -39,6 +39,8 @@ DROP TABLE IF EXISTS users CASCADE;
 DROP FUNCTION IF EXISTS check_resource_is_notebook() CASCADE;
 DROP FUNCTION IF EXISTS check_resource_is_note() CASCADE;
 DROP FUNCTION IF EXISTS sync_issue_status_on_branch_merge() CASCADE;
+DROP PROCEDURE IF EXISTS merge_issue_branch(UUID, UUID, TEXT) CASCADE;
+DROP PROCEDURE IF EXISTS fork_note_zero_cost(UUID, UUID, UUID, TEXT, UUID) CASCADE;
 
 CREATE EXTENSION IF NOT EXISTS pgcrypto;
 
@@ -379,6 +381,325 @@ CREATE TRIGGER trg_branch_merge_updates_issue
     FOR EACH ROW
     WHEN (NEW.is_merged IS DISTINCT FROM OLD.is_merged)
     EXECUTE FUNCTION sync_issue_status_on_branch_merge();
+
+-- =====================================================================
+-- STORED PROCEDURES (Atomic Multi-Table Business Workflows)
+-- =====================================================================
+
+-- ---------------------------------------------------------------------
+-- Procedure 1: merge_issue_branch
+-- Purpose: Atomically merges a contributor's issue-attempt branch into
+--          the main branch of a note. Creates a 3-way merge commit,
+--          reconstructs the commit_manifests ternary mapping, marks the
+--          branch merged (firing the issue sync trigger), and dispatches
+--          an audit notification.
+-- ---------------------------------------------------------------------
+CREATE OR REPLACE PROCEDURE merge_issue_branch(
+    p_branch_id        UUID,
+    p_merger_user_id   UUID,
+    p_commit_message   TEXT DEFAULT NULL
+)
+LANGUAGE plpgsql
+AS $$
+DECLARE
+    v_note_id               UUID;
+    v_issue_id              UUID;
+    v_attempted_by          UUID;
+    v_branch_name           TEXT;
+    v_main_branch_id        UUID;
+    v_main_head_commit_id   UUID;
+    v_branch_head_commit_id UUID;
+    v_new_commit_id         UUID;
+    v_new_commit_hash       TEXT;
+    v_effective_msg         TEXT;
+    v_target_slot_id        UUID;
+    v_issue_title           TEXT;
+BEGIN
+    -- 1. Validate branch exists, is not main, and is not already merged
+    SELECT b.note_id, b.issue_id, b.attempted_by, b.branch_name, i.target_slot_id, i.title
+      INTO v_note_id, v_issue_id, v_attempted_by, v_branch_name, v_target_slot_id, v_issue_title
+      FROM branches b
+      JOIN issues i ON i.issue_id = b.issue_id
+     WHERE b.branch_id = p_branch_id
+       AND b.is_main = FALSE
+       AND b.is_merged = FALSE;
+
+    IF NOT FOUND THEN
+        RAISE EXCEPTION 'Branch % is invalid, is a main branch, or has already been merged.', p_branch_id;
+    END IF;
+
+    -- 2. Verify merger user exists
+    IF NOT EXISTS (SELECT 1 FROM users WHERE user_id = p_merger_user_id) THEN
+        RAISE EXCEPTION 'Merger user % does not exist.', p_merger_user_id;
+    END IF;
+
+    -- 3. Locate the single main branch for this note
+    SELECT branch_id INTO v_main_branch_id
+      FROM branches
+     WHERE note_id = v_note_id AND is_main = TRUE;
+
+    IF v_main_branch_id IS NULL THEN
+        RAISE EXCEPTION 'Corrupt note state: Note % has no main branch.', v_note_id;
+    END IF;
+
+    -- 4. Locate latest commit on main branch (Main HEAD)
+    SELECT commit_id INTO v_main_head_commit_id
+      FROM commits
+     WHERE branch_id = v_main_branch_id
+     ORDER BY created_at DESC
+     LIMIT 1;
+
+    -- 5. Locate latest commit on attempt branch (Attempt HEAD)
+    SELECT commit_id INTO v_branch_head_commit_id
+      FROM commits
+     WHERE branch_id = p_branch_id
+     ORDER BY created_at DESC
+     LIMIT 1;
+
+    IF v_branch_head_commit_id IS NULL THEN
+        RAISE EXCEPTION 'Cannot merge: Branch % contains zero commits.', p_branch_id;
+    END IF;
+
+    -- 6. Format commit message & generate cryptographic commit hash (SHA-256)
+    v_effective_msg := COALESCE(p_commit_message, 'Merge branch ''' || v_branch_name || ''' into main');
+    v_new_commit_id := gen_random_uuid();
+    v_new_commit_hash := encode(digest(
+        v_main_branch_id::text || ':' ||
+        COALESCE(v_main_head_commit_id::text, 'ROOT') || ':' ||
+        v_branch_head_commit_id::text || ':' ||
+        clock_timestamp()::text || ':' ||
+        v_effective_msg,
+        'sha256'
+    ), 'hex');
+
+    -- 7. Insert the merge commit on the main branch
+    INSERT INTO commits (
+        commit_id,
+        branch_id,
+        parent_commit_id,
+        merge_parent_commit_id,
+        author_id,
+        commit_message,
+        commit_hash,
+        created_at
+    ) VALUES (
+        v_new_commit_id,
+        v_main_branch_id,
+        v_main_head_commit_id,
+        v_branch_head_commit_id,
+        p_merger_user_id,
+        v_effective_msg,
+        v_new_commit_hash,
+        now()
+    );
+
+    -- 8. Build and insert the ternary commit_manifests for the new merge commit
+    -- All slots retain their version from Main HEAD, except the updated branch slot.
+    INSERT INTO commit_manifests (manifest_id, commit_id, slot_id, version_id)
+    SELECT
+        gen_random_uuid(),
+        v_new_commit_id,
+        s.slot_id,
+        COALESCE(branch_m.version_id, main_m.version_id) AS version_id
+    FROM logical_block_slots s
+    LEFT JOIN commit_manifests branch_m
+           ON branch_m.commit_id = v_branch_head_commit_id
+          AND branch_m.slot_id = s.slot_id
+    LEFT JOIN commit_manifests main_m
+           ON main_m.commit_id = v_main_head_commit_id
+          AND main_m.slot_id = s.slot_id
+    WHERE s.note_id = v_note_id
+      AND COALESCE(branch_m.version_id, main_m.version_id) IS NOT NULL;
+
+    -- 9. Mark attempt branch as merged and record winning selector
+    UPDATE branches
+       SET is_merged   = TRUE,
+           selected_by = p_merger_user_id,
+           selected_at = now()
+     WHERE branch_id   = p_branch_id;
+    -- Note: trg_branch_merge_updates_issue automatically fires and updates issues.status = 'MERGED'
+
+    -- 10. Generate system notification for the branch contributor
+    IF v_attempted_by IS NOT NULL AND v_attempted_by <> p_merger_user_id THEN
+        INSERT INTO notifications (
+            user_id,
+            notification_type,
+            title,
+            message,
+            link,
+            related_resource_id,
+            related_user_id
+        ) VALUES (
+            v_attempted_by,
+            'BRANCH_MERGED',
+            'Your branch was merged!',
+            'Your changes on branch ''' || v_branch_name || ''' were selected and merged into main.',
+            '/dashboard/notes/' || v_note_id::text,
+            v_note_id,
+            p_merger_user_id
+        );
+    END IF;
+END;
+$$;
+
+-- ---------------------------------------------------------------------
+-- Procedure 2: fork_note_zero_cost
+-- Purpose: Clones an entire note into a destination notebook utilizing
+--          Content-Addressed Storage (CAS) zero-duplication principles.
+--          Creates a new note ISA subtype, clones logical slots, creates
+--          an initial commit, and maps existing block versions directly.
+-- ---------------------------------------------------------------------
+CREATE OR REPLACE PROCEDURE fork_note_zero_cost(
+    p_source_note_id    UUID,
+    p_dest_notebook_id  UUID,
+    p_user_id           UUID,
+    p_new_title         TEXT,
+    INOUT p_forked_note_id UUID DEFAULT NULL
+)
+LANGUAGE plpgsql
+AS $$
+DECLARE
+    v_source_main_branch_id UUID;
+    v_source_head_commit_id UUID;
+    v_new_note_id           UUID;
+    v_new_main_branch_id    UUID;
+    v_new_commit_id         UUID;
+    v_new_commit_hash       TEXT;
+BEGIN
+    -- 1. Validate destination notebook exists and user exists
+    IF NOT EXISTS (SELECT 1 FROM notebooks WHERE notebook_id = p_dest_notebook_id) THEN
+        RAISE EXCEPTION 'Destination notebook % does not exist.', p_dest_notebook_id;
+    END IF;
+
+    IF NOT EXISTS (SELECT 1 FROM users WHERE user_id = p_user_id) THEN
+        RAISE EXCEPTION 'User % does not exist.', p_user_id;
+    END IF;
+
+    -- 2. Verify source note has a valid main branch and HEAD commit
+    SELECT branch_id INTO v_source_main_branch_id
+      FROM branches
+     WHERE note_id = p_source_note_id AND is_main = TRUE;
+
+    IF v_source_main_branch_id IS NULL THEN
+        RAISE EXCEPTION 'Source note % has no active main branch.', p_source_note_id;
+    END IF;
+
+    SELECT commit_id INTO v_source_head_commit_id
+      FROM commits
+     WHERE branch_id = v_source_main_branch_id
+     ORDER BY created_at DESC
+     LIMIT 1;
+
+    IF v_source_head_commit_id IS NULL THEN
+        RAISE EXCEPTION 'Source note % contains zero commits.', p_source_note_id;
+    END IF;
+
+    -- 3. Create ISA resource for the new note
+    v_new_note_id := gen_random_uuid();
+    INSERT INTO resources (resource_id, resource_type, created_at)
+    VALUES (v_new_note_id, 'NOTE', now());
+
+    -- 4. Insert into notes referencing the parent note (forked_from_note_id)
+    INSERT INTO notes (
+        note_id,
+        notebook_id,
+        title,
+        forked_from_note_id,
+        visibility
+    ) VALUES (
+        v_new_note_id,
+        p_dest_notebook_id,
+        p_new_title,
+        p_source_note_id,
+        'PRIVATE'
+    );
+
+    -- 5. Assign OWNER role to the user on the newly forked note
+    INSERT INTO collaborator_roles (
+        user_id,
+        resource_id,
+        role_type,
+        granted_by
+    ) VALUES (
+        p_user_id,
+        v_new_note_id,
+        'OWNER',
+        p_user_id
+    );
+
+    -- 6. Create main branch for the newly forked note
+    v_new_main_branch_id := gen_random_uuid();
+    INSERT INTO branches (
+        branch_id,
+        note_id,
+        branch_name,
+        is_main,
+        created_at
+    ) VALUES (
+        v_new_main_branch_id,
+        v_new_note_id,
+        'main',
+        TRUE,
+        now()
+    );
+
+    -- 7. Deep-copy logical block slots (assigning fresh slot_ids for the new note)
+    CREATE TEMP TABLE tmp_slot_map ON COMMIT DROP AS
+    SELECT 
+        s.slot_id AS old_slot_id,
+        gen_random_uuid() AS new_slot_id,
+        s.lexorank_key,
+        s.block_type
+    FROM logical_block_slots s
+    WHERE s.note_id = p_source_note_id;
+
+    INSERT INTO logical_block_slots (slot_id, note_id, lexorank_key, block_type)
+    SELECT new_slot_id, v_new_note_id, lexorank_key, block_type
+    FROM tmp_slot_map;
+
+    -- 8. Create new initial commit on forked note's main branch
+    v_new_commit_id := gen_random_uuid();
+    v_new_commit_hash := encode(digest(
+        v_new_main_branch_id::text || ':' ||
+        v_source_head_commit_id::text || ':' ||
+        clock_timestamp()::text || ':' ||
+        'Forked from note ' || p_source_note_id::text,
+        'sha256'
+    ), 'hex');
+
+    INSERT INTO commits (
+        commit_id,
+        branch_id,
+        parent_commit_id,
+        author_id,
+        commit_message,
+        commit_hash,
+        created_at
+    ) VALUES (
+        v_new_commit_id,
+        v_new_main_branch_id,
+        NULL,
+        p_user_id,
+        'Forked from note ' || p_source_note_id::text,
+        v_new_commit_hash,
+        now()
+    );
+
+    -- 9. Re-use existing immutable block version contents & content blobs! (Zero-cost CAS sharing)
+    INSERT INTO commit_manifests (manifest_id, commit_id, slot_id, version_id)
+    SELECT
+        gen_random_uuid(),
+        v_new_commit_id,
+        m.new_slot_id,
+        cm.version_id
+    FROM tmp_slot_map m
+    JOIN commit_manifests cm ON cm.slot_id = m.old_slot_id
+    WHERE cm.commit_id = v_source_head_commit_id;
+
+    -- 10. Return new note ID to caller
+    p_forked_note_id := v_new_note_id;
+END;
+$$;
 
 -- =====================================================================
 -- LOOKUP INDEXES

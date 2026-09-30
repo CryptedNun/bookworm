@@ -22,6 +22,8 @@ export interface Note {
   default_edition_id?: string | null;
   role_type: 'OWNER' | 'MAINTAINER' | 'CONTRIBUTOR';
   notebook_title?: string;
+  stars_count?: number;
+  is_starred?: boolean;
 }
 
 interface CreateNoteInput {
@@ -314,7 +316,9 @@ export async function getNotesForNotebook(notebookId: string, userId: string) {
         ) as role_type,
         (SELECT COUNT(*) FROM logical_block_slots lbs WHERE lbs.note_id = n.note_id) as blocks_count,
         (SELECT COUNT(*) FROM branches b WHERE b.note_id = n.note_id AND b.is_main = FALSE) as branches_count,
-        (SELECT COUNT(*) FROM issues i WHERE i.note_id = n.note_id AND i.status IN ('OPEN', 'IN_PROGRESS')) as open_issues_count
+        (SELECT COUNT(*) FROM issues i WHERE i.note_id = n.note_id AND i.status IN ('OPEN', 'IN_PROGRESS')) as open_issues_count,
+        COALESCE((SELECT COUNT(*) FROM user_starred_resources usr WHERE usr.resource_id = n.note_id), 0)::int as stars_count,
+        EXISTS (SELECT 1 FROM user_starred_resources usr WHERE usr.resource_id = n.note_id AND usr.user_id = ${userId}) as is_starred
       FROM notes n
       INNER JOIN resources r ON r.resource_id = n.note_id
       INNER JOIN notebooks nb ON nb.notebook_id = n.notebook_id
@@ -446,7 +450,9 @@ export async function getNote(noteId: string, userId?: string) {
           (SELECT cr_nb.role_type FROM collaborator_roles cr_nb WHERE cr_nb.resource_id = n.notebook_id AND cr_nb.user_id = ${userId} LIMIT 1),
           CASE WHEN nb.owner_id = ${userId} THEN 'OWNER' ELSE 'VIEWER' END
         ) as role_type,
-        nb.title as notebook_title
+        nb.title as notebook_title,
+        COALESCE((SELECT COUNT(*) FROM user_starred_resources usr WHERE usr.resource_id = n.note_id), 0)::int as stars_count,
+        EXISTS (SELECT 1 FROM user_starred_resources usr WHERE usr.resource_id = n.note_id AND usr.user_id = ${userId}) as is_starred
       FROM notes n
       INNER JOIN resources r ON r.resource_id = n.note_id
       INNER JOIN notebooks nb ON nb.notebook_id = n.notebook_id

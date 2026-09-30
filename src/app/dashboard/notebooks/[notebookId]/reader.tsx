@@ -16,6 +16,7 @@ import {
 } from 'lucide-react';
 import RobustMarkdown from '@/components/markdown/RobustMarkdown';
 import ForkNoteButton from '@/components/notes/ForkNoteButton';
+import StarButton from '@/components/notes/StarButton';
 import type { Notebook } from '@/actions/notebooks';
 import type { Note } from '@/actions/notes';
 import type { User } from '@/actions/auth';
@@ -73,6 +74,14 @@ export default function NotebookReader({ notebook, notes, user, userNotebooks = 
           </div>
 
           <div className="flex items-center gap-2">
+            <StarButton
+              resourceId={notebook.notebook_id}
+              initialStarred={(notebook as any).is_starred}
+              initialCount={(notebook as any).stars_count || 0}
+              showLabel={true}
+              showCount={true}
+            />
+
             <button
               onClick={() => setShowTOC(!showTOC)}
               className="px-3 py-2 rounded-lg bg-zinc-800 hover:bg-zinc-700 text-zinc-200 text-sm font-medium transition-colors flex items-center gap-2"

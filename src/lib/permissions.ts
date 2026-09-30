@@ -163,13 +163,56 @@ export async function getCollaborators(resourceId: string) {
       FROM collaborator_roles cr
       INNER JOIN users u ON u.user_id = cr.user_id
       WHERE cr.resource_id = ${resourceId}
+      
+      UNION ALL
+      
+      SELECT
+        nb.notebook_id as role_id,
+        u.user_id,
+        'OWNER' as role_type,
+        NULL::jsonb as capabilities,
+        u.user_id as granted_by,
+        nb.created_at,
+        u.username,
+        u.email,
+        u.avatar_url
+      FROM notebooks nb
+      INNER JOIN users u ON u.user_id = nb.owner_id
+      WHERE nb.notebook_id = ${resourceId}
+        AND NOT EXISTS (
+          SELECT 1 FROM collaborator_roles cr2 
+          WHERE cr2.resource_id = nb.notebook_id AND cr2.user_id = nb.owner_id
+        )
+
+      UNION ALL
+
+      SELECT
+        n.note_id as role_id,
+        u.user_id,
+        'OWNER' as role_type,
+        NULL::jsonb as capabilities,
+        u.user_id as granted_by,
+        n.created_at,
+        u.username,
+        u.email,
+        u.avatar_url
+      FROM notes n
+      INNER JOIN notebooks nb ON nb.notebook_id = n.notebook_id
+      INNER JOIN users u ON u.user_id = nb.owner_id
+      WHERE n.note_id = ${resourceId}
+        AND NOT EXISTS (
+          SELECT 1 FROM collaborator_roles cr2 
+          WHERE cr2.resource_id = n.note_id AND cr2.user_id = nb.owner_id
+        )
+
       ORDER BY 
-        CASE cr.role_type
+        CASE role_type
           WHEN 'OWNER' THEN 1
           WHEN 'MAINTAINER' THEN 2
           WHEN 'CONTRIBUTOR' THEN 3
+          ELSE 4
         END,
-        cr.created_at ASC
+        created_at ASC
     `;
 
     return collaborators;

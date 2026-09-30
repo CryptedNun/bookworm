@@ -50,6 +50,7 @@ import UnmergedBranchesWidget from "@/components/dashboard/UnmergedBranchesWidge
 import StorageAndActivityWidget from "@/components/dashboard/StorageAndActivityWidget";
 import type { UnmergedBranchItem, DashboardNoteItem, StorageAnalytics, ActivityItem } from "@/actions/dashboard";
 import ForkNoteModal from "@/components/notes/ForkNoteModal";
+import StarButton from "@/components/notes/StarButton";
 import { TopNav } from "@/components/dashboard/TopNav";
 import type { StarredResourceItem } from "@/actions/stars";
 
@@ -696,6 +697,13 @@ export function HomeFeed({
                   </div>
 
                   <div className="flex items-center gap-2 shrink-0">
+                    <StarButton
+                      resourceId={nb.notebook_id}
+                      initialStarred={(nb as any).is_starred}
+                      initialCount={(nb as any).stars_count || 0}
+                      showLabel={false}
+                    />
+
                     <Link
                       href={`/dashboard/notebooks/${nb.notebook_id}/manage`}
                       className="px-3 py-1.5 rounded-lg bg-zinc-800 hover:bg-zinc-700 text-zinc-300 text-xs font-semibold border border-zinc-700/60 transition-colors flex items-center gap-1.5"
@@ -735,6 +743,14 @@ export function HomeFeed({
                             >
                               {note.title}
                             </Link>
+
+                            <StarButton
+                              resourceId={note.note_id}
+                              initialStarred={(note as any).is_starred}
+                              initialCount={(note as any).stars_count || 0}
+                              showLabel={false}
+                              className="shrink-0 scale-90 origin-top-right"
+                            />
                           </div>
 
                           <div className="flex items-center gap-2 text-[11px] text-zinc-500 font-mono">
@@ -1232,6 +1248,125 @@ export function CreateModal({
     }
   }, [isOpen, initialType]);
 
+  // Fork states
+  const [forkSourceNotebookId, setForkSourceNotebookId] = useState<string>("");
+  const [forkSourceNoteId, setForkSourceNoteId] = useState<string>("");
+  const [forkDestNotebookId, setForkDestNotebookId] = useState<string>("");
+
+  // Branch states
+  const [branchNotebookId, setBranchNotebookId] = useState<string>("");
+  const [branchNoteId, setBranchNoteId] = useState<string>("");
+  const [branchMode, setBranchMode] = useState<"new_issue" | "existing_issue">("new_issue");
+  const [branchIssues, setBranchIssues] = useState<Array<{ issue_id: string; title: string; status: string }>>([]);
+  const [selectedBranchIssueId, setSelectedBranchIssueId] = useState<string>("");
+  const [branchBlocks, setBranchBlocks] = useState<Array<{ slot_id: string; block_type: string; content_text: string }>>([]);
+  const [branchSlotId, setBranchSlotId] = useState<string>("");
+  const [isLoadingBranchBlocks, setIsLoadingBranchBlocks] = useState(false);
+
+  // Available notes for fork source notebook
+  const notesInForkSource = React.useMemo(
+    () => dashboardNotes.filter((n) => n.notebook_id === forkSourceNotebookId),
+    [dashboardNotes, forkSourceNotebookId]
+  );
+
+  // Available notes for branch notebook
+  const notesInBranchNotebook = React.useMemo(
+    () => dashboardNotes.filter((n) => n.notebook_id === branchNotebookId && (n as any).role_type !== 'VIEWER'),
+    [dashboardNotes, branchNotebookId]
+  );
+
+  // Init fork & branch notebooks when modal opens
+  React.useEffect(() => {
+    if (!isOpen) return;
+    if (notebooks.length > 0 && !forkSourceNotebookId) {
+      setForkSourceNotebookId(notebooks[0].notebook_id);
+    }
+    if (notePermittedNotebooks.length > 0 && !forkDestNotebookId) {
+      setForkDestNotebookId(notePermittedNotebooks[0].notebook_id);
+    }
+    if (issuePermittedNotebooks.length > 0 && !branchNotebookId) {
+      setBranchNotebookId(issuePermittedNotebooks[0].notebook_id);
+    }
+  }, [isOpen, notebooks, notePermittedNotebooks, issuePermittedNotebooks]);
+
+  // Sync fork source note selection
+  React.useEffect(() => {
+    if (!isOpen || activeType !== "fork") return;
+    if (notesInForkSource.length > 0) {
+      if (!forkSourceNoteId || !notesInForkSource.some((n) => n.note_id === forkSourceNoteId)) {
+        const firstNote = notesInForkSource[0];
+        setForkSourceNoteId(firstNote.note_id);
+        setTitle(`${firstNote.title} (Fork)`);
+      }
+    } else {
+      setForkSourceNoteId("");
+      setTitle("");
+    }
+  }, [isOpen, activeType, notesInForkSource, forkSourceNoteId]);
+
+  // Sync branch note selection
+  React.useEffect(() => {
+    if (!isOpen || activeType !== "branch") return;
+    if (notesInBranchNotebook.length > 0) {
+      if (!branchNoteId || !notesInBranchNotebook.some((n) => n.note_id === branchNoteId)) {
+        setBranchNoteId(notesInBranchNotebook[0].note_id);
+      }
+    } else {
+      setBranchNoteId("");
+      setBranchBlocks([]);
+      setBranchIssues([]);
+      setBranchSlotId("");
+      setSelectedBranchIssueId("");
+    }
+  }, [isOpen, activeType, notesInBranchNotebook, branchNoteId]);
+
+  // Fetch blocks and issues for selected branch note
+  React.useEffect(() => {
+    if (!isOpen || activeType !== "branch" || !branchNoteId) return;
+
+    setIsLoadingBranchBlocks(true);
+    import('@/actions/notes').then(({ getNoteWithBlocks }) => {
+      getNoteWithBlocks(branchNoteId)
+        .then((res) => {
+          if (res.success && 'note' in res && res.note && Array.isArray((res.note as any).blocks)) {
+            const blocks = (res.note as any).blocks;
+            setBranchBlocks(blocks);
+            setBranchSlotId(blocks[0]?.slot_id || "");
+          } else {
+            setBranchBlocks([]);
+            setBranchSlotId("");
+          }
+        })
+        .catch(() => {
+          setBranchBlocks([]);
+          setBranchSlotId("");
+        })
+        .finally(() => {
+          setIsLoadingBranchBlocks(false);
+        });
+    });
+
+    import('@/actions/issues').then(({ getIssues }) => {
+      getIssues(branchNoteId, false)
+        .then((res) => {
+          if (res.success && res.issues) {
+            const open = res.issues.filter((i: any) => i.status === 'OPEN' || i.status === 'IN_PROGRESS');
+            setBranchIssues(open);
+            if (open.length > 0) {
+              setSelectedBranchIssueId(open[0].issue_id);
+              setBranchMode("existing_issue");
+            } else {
+              setBranchMode("new_issue");
+              setSelectedBranchIssueId("");
+            }
+          }
+        })
+        .catch(() => {
+          setBranchIssues([]);
+        });
+    });
+  }, [isOpen, activeType, branchNoteId]);
+
   if (!isOpen) return null;
 
   const handleSubmit = async (e: React.FormEvent) => {
@@ -1301,6 +1436,68 @@ export function CreateModal({
           router.push(`/dashboard/notebooks/${issueNotebookId}/notes/${issueNoteId}/edit?branch=${result.issue.branch_id}`);
         } else {
           setError(result.error || 'Failed to create issue');
+        }
+      } else if (activeType === "fork") {
+        if (!forkSourceNoteId) {
+          setError('Please select a source note to fork');
+          return;
+        }
+        if (!forkDestNotebookId) {
+          setError('Please select a destination notebook');
+          return;
+        }
+
+        const { forkNote } = await import('@/actions/notes');
+        const result = await forkNote({
+          noteId: forkSourceNoteId,
+          targetNotebookId: forkDestNotebookId,
+          newTitle: title.trim() || 'Forked Note',
+          userId,
+        });
+
+        if (result.success && result.noteId && result.notebookId) {
+          onSuccess(`Note successfully forked as "${title.trim()}"!`);
+          onClose();
+          router.push(`/dashboard/notebooks/${result.notebookId}/notes/${result.noteId}`);
+        } else {
+          setError(result.error || 'Failed to fork note');
+        }
+      } else if (activeType === "branch") {
+        if (!branchNoteId) {
+          setError('Please select a note to branch');
+          return;
+        }
+
+        if (branchMode === "existing_issue" && selectedBranchIssueId) {
+          const { contributeToIssue } = await import('@/actions/issues');
+          const result = await contributeToIssue(selectedBranchIssueId);
+          if (result.success && result.branchId) {
+            onSuccess(`Attempt branch "${result.branchName}" ready!`);
+            onClose();
+            router.push(`/dashboard/notebooks/${branchNotebookId}/notes/${branchNoteId}/edit?branch=${result.branchId}`);
+          } else {
+            setError(result.error || 'Failed to create attempt branch');
+          }
+        } else {
+          if (!branchSlotId) {
+            setError('Please select a target block to branch from');
+            return;
+          }
+          const { createIssue } = await import('@/actions/issues');
+          const result = await createIssue({
+            noteId: branchNoteId,
+            slotId: branchSlotId,
+            title: title.trim(),
+            description: description.trim() || undefined,
+          });
+
+          if (result.success && result.issue) {
+            onSuccess(`Branch "${result.issue.branch_name}" created!`);
+            onClose();
+            router.push(`/dashboard/notebooks/${branchNotebookId}/notes/${branchNoteId}/edit?branch=${result.issue.branch_id}`);
+          } else {
+            setError(result.error || 'Failed to create branch');
+          }
         }
       } else {
         onSuccess(`Resource created successfully!`);
@@ -1418,7 +1615,9 @@ export function CreateModal({
                   ? "e.g. Raft Consensus Protocol Explained"
                   : activeType === "issue"
                   ? "e.g. Fix typo in Section 3 & add diagram"
-                  : "e.g. feature-async-streams"
+                  : activeType === "fork"
+                  ? "e.g. Raft Consensus Protocol (Fork)"
+                  : "e.g. feature-perf-improvement"
               }
               className="w-full px-3 py-2 rounded-lg bg-zinc-950 border border-zinc-800 text-zinc-100 placeholder-zinc-500 focus:outline-none focus:border-emerald-500/50"
             />
@@ -1552,6 +1751,233 @@ export function CreateModal({
                   </div>
                 )}
               </div>
+            </div>
+          )}
+
+          {/* Cascading Notebook -> Note -> Destination Notebook when Forking */}
+          {activeType === "fork" && (
+            <div className="space-y-3.5 p-4 rounded-xl bg-cyan-950/20 border border-cyan-500/20 text-xs">
+              <div className="flex items-center gap-1.5 text-cyan-400 font-semibold">
+                <GitFork className="w-3.5 h-3.5" />
+                <span>Zero-Cost Content-Addressed Note Fork</span>
+              </div>
+
+              {/* 1. Source Notebook */}
+              <div>
+                <label className="block text-cyan-300 font-medium mb-1">1. Source Notebook</label>
+                <select
+                  value={forkSourceNotebookId}
+                  onChange={(e) => {
+                    const nbId = e.target.value;
+                    setForkSourceNotebookId(nbId);
+                    const matchingNotes = dashboardNotes.filter((n) => n.notebook_id === nbId);
+                    if (matchingNotes.length > 0) {
+                      setForkSourceNoteId(matchingNotes[0].note_id);
+                      setTitle(`${matchingNotes[0].title} (Fork)`);
+                    } else {
+                      setForkSourceNoteId("");
+                      setTitle("");
+                    }
+                  }}
+                  className="w-full px-3 py-2 rounded-lg bg-zinc-950 border border-zinc-800 text-zinc-200 focus:outline-none focus:border-cyan-500/50"
+                >
+                  {notebooks.map((nb) => (
+                    <option key={nb.notebook_id} value={nb.notebook_id}>
+                      {nb.title}
+                    </option>
+                  ))}
+                </select>
+              </div>
+
+              {/* 2. Source Note */}
+              <div>
+                <label className="block text-cyan-300 font-medium mb-1">2. Source Note to Fork</label>
+                {notesInForkSource.length === 0 ? (
+                  <p className="text-zinc-500 italic p-2 bg-zinc-950 rounded-lg border border-zinc-800">
+                    No notes found in this notebook.
+                  </p>
+                ) : (
+                  <select
+                    value={forkSourceNoteId}
+                    onChange={(e) => {
+                      const noteId = e.target.value;
+                      setForkSourceNoteId(noteId);
+                      const found = notesInForkSource.find((n) => n.note_id === noteId);
+                      if (found) setTitle(`${found.title} (Fork)`);
+                    }}
+                    className="w-full px-3 py-2 rounded-lg bg-zinc-950 border border-zinc-800 text-zinc-200 focus:outline-none focus:border-cyan-500/50"
+                  >
+                    {notesInForkSource.map((note) => (
+                      <option key={note.note_id} value={note.note_id}>
+                        {note.title} ({note.blocks_count} blocks)
+                      </option>
+                    ))}
+                  </select>
+                )}
+              </div>
+
+              {/* 3. Destination Notebook */}
+              <div>
+                <label className="block text-cyan-300 font-medium mb-1">3. Destination Notebook</label>
+                {notePermittedNotebooks.length === 0 ? (
+                  <div className="p-2.5 rounded-lg bg-red-950/30 border border-red-800/40 text-red-300 text-xs">
+                    You must be an Owner or Maintainer of a notebook to fork notes into it.
+                  </div>
+                ) : (
+                  <select
+                    value={forkDestNotebookId}
+                    onChange={(e) => setForkDestNotebookId(e.target.value)}
+                    className="w-full px-3 py-2 rounded-lg bg-zinc-950 border border-zinc-800 text-zinc-200 focus:outline-none focus:border-cyan-500/50"
+                  >
+                    {notePermittedNotebooks.map((nb) => (
+                      <option key={nb.notebook_id} value={nb.notebook_id}>
+                        {nb.title}
+                      </option>
+                    ))}
+                  </select>
+                )}
+              </div>
+            </div>
+          )}
+
+          {/* Cascading Notebook -> Note -> Issue/Block when creating a Branch */}
+          {activeType === "branch" && (
+            <div className="space-y-3.5 p-4 rounded-xl bg-blue-950/20 border border-blue-500/20 text-xs">
+              <div className="flex items-center gap-1.5 text-blue-400 font-semibold">
+                <GitBranch className="w-3.5 h-3.5" />
+                <span>Isolated Collaboration Branch</span>
+              </div>
+
+              {/* 1. Choose Notebook */}
+              <div>
+                <label className="block text-blue-300 font-medium mb-1">1. Choose Notebook</label>
+                <select
+                  value={branchNotebookId}
+                  onChange={(e) => {
+                    const nbId = e.target.value;
+                    setBranchNotebookId(nbId);
+                    const matchingNotes = dashboardNotes.filter((n) => n.notebook_id === nbId && (n as any).role_type !== 'VIEWER');
+                    if (matchingNotes.length > 0) {
+                      setBranchNoteId(matchingNotes[0].note_id);
+                    } else {
+                      setBranchNoteId("");
+                    }
+                  }}
+                  className="w-full px-3 py-2 rounded-lg bg-zinc-950 border border-zinc-800 text-zinc-200 focus:outline-none focus:border-blue-500/50"
+                >
+                  {issuePermittedNotebooks.map((nb) => (
+                    <option key={nb.notebook_id} value={nb.notebook_id}>
+                      {nb.title}
+                    </option>
+                  ))}
+                </select>
+              </div>
+
+              {/* 2. Choose Note */}
+              <div>
+                <label className="block text-blue-300 font-medium mb-1">2. Choose Note</label>
+                {notesInBranchNotebook.length === 0 ? (
+                  <p className="text-zinc-500 italic p-2 bg-zinc-950 rounded-lg border border-zinc-800">
+                    No accessible notes in this notebook.
+                  </p>
+                ) : (
+                  <select
+                    value={branchNoteId}
+                    onChange={(e) => setBranchNoteId(e.target.value)}
+                    className="w-full px-3 py-2 rounded-lg bg-zinc-950 border border-zinc-800 text-zinc-200 focus:outline-none focus:border-blue-500/50"
+                  >
+                    {notesInBranchNotebook.map((note) => (
+                      <option key={note.note_id} value={note.note_id}>
+                        {note.title} ({note.blocks_count} blocks)
+                      </option>
+                    ))}
+                  </select>
+                )}
+              </div>
+
+              {/* 3. Branch Mode Selection */}
+              {branchIssues.length > 0 && (
+                <div>
+                  <label className="block text-blue-300 font-medium mb-1">3. Branch Target Mode</label>
+                  <div className="grid grid-cols-2 gap-2">
+                    <button
+                      type="button"
+                      onClick={() => setBranchMode("existing_issue")}
+                      className={`p-2 rounded-lg border text-left transition-colors cursor-pointer ${
+                        branchMode === "existing_issue"
+                          ? "border-blue-500 bg-blue-500/10 text-blue-400 font-semibold"
+                          : "border-zinc-800 bg-zinc-950/60 text-zinc-400 hover:text-zinc-200"
+                      }`}
+                    >
+                      <div className="flex items-center gap-1 font-semibold text-[11px]">
+                        <CircleDot className="w-3 h-3" />
+                        <span>Work on Open Issue ({branchIssues.length})</span>
+                      </div>
+                      <p className="text-[10px] text-zinc-500 mt-0.5">Attempt fix on active task</p>
+                    </button>
+
+                    <button
+                      type="button"
+                      onClick={() => setBranchMode("new_issue")}
+                      className={`p-2 rounded-lg border text-left transition-colors cursor-pointer ${
+                        branchMode === "new_issue"
+                          ? "border-blue-500 bg-blue-500/10 text-blue-400 font-semibold"
+                          : "border-zinc-800 bg-zinc-950/60 text-zinc-400 hover:text-zinc-200"
+                      }`}
+                    >
+                      <div className="flex items-center gap-1 font-semibold text-[11px]">
+                        <GitBranch className="w-3 h-3" />
+                        <span>Target Block Slot</span>
+                      </div>
+                      <p className="text-[10px] text-zinc-500 mt-0.5">Lock a block & branch</p>
+                    </button>
+                  </div>
+                </div>
+              )}
+
+              {/* Selection based on branchMode */}
+              {branchMode === "existing_issue" && branchIssues.length > 0 ? (
+                <div>
+                  <label className="block text-blue-300 font-medium mb-1">Select Open Issue to Attempt</label>
+                  <select
+                    value={selectedBranchIssueId}
+                    onChange={(e) => setSelectedBranchIssueId(e.target.value)}
+                    className="w-full px-3 py-2 rounded-lg bg-zinc-950 border border-zinc-800 text-zinc-200 focus:outline-none focus:border-blue-500/50"
+                  >
+                    {branchIssues.map((issue) => (
+                      <option key={issue.issue_id} value={issue.issue_id}>
+                        {issue.title} [{issue.status}]
+                      </option>
+                    ))}
+                  </select>
+                </div>
+              ) : (
+                <div>
+                  <label className="block text-blue-300 font-medium mb-1">Target Block to Lock & Modify</label>
+                  {isLoadingBranchBlocks ? (
+                    <div className="flex items-center gap-2 text-zinc-400 p-2 bg-zinc-950 rounded-lg border border-zinc-800 font-mono text-[11px]">
+                      <span className="w-3 h-3 border-2 border-blue-400 border-t-transparent rounded-full animate-spin" />
+                      Loading blocks...
+                    </div>
+                  ) : branchBlocks.length === 0 ? (
+                    <p className="text-zinc-500 italic p-2 bg-zinc-950 rounded-lg border border-zinc-800">
+                      This note has no blocks yet.
+                    </p>
+                  ) : (
+                    <select
+                      value={branchSlotId}
+                      onChange={(e) => setBranchSlotId(e.target.value)}
+                      className="w-full px-3 py-2 rounded-lg bg-zinc-950 border border-zinc-800 text-zinc-200 focus:outline-none focus:border-blue-500/50 font-mono text-[11px]"
+                    >
+                      {branchBlocks.map((blk, idx) => (
+                        <option key={blk.slot_id} value={blk.slot_id}>
+                          Block #{idx + 1} [{blk.block_type}]: {blk.content_text ? blk.content_text.substring(0, 45) : 'Empty'}...
+                        </option>
+                      ))}
+                    </select>
+                  )}
+                </div>
+              )}
             </div>
           )}
 

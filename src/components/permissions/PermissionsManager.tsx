@@ -24,6 +24,7 @@ import {
   reviewAccessRequest,
   getResourceCollaborators,
   cancelInvitation,
+  requestAccess,
 } from '@/actions/permissions';
 
 interface Collaborator {
@@ -52,7 +53,7 @@ interface PermissionsManagerProps {
   resourceId: string;
   resourceType: 'NOTEBOOK' | 'NOTE';
   currentUserId: string;
-  currentUserRole: 'OWNER' | 'MAINTAINER' | 'CONTRIBUTOR';
+  currentUserRole: 'OWNER' | 'MAINTAINER' | 'CONTRIBUTOR' | 'VIEWER' | 'NONE';
   initialCollaborators: Collaborator[];
   initialAccessRequests: AccessRequest[];
 }
@@ -71,6 +72,9 @@ export default function PermissionsManager({
   const [showAddForm, setShowAddForm] = useState(false);
   const [addEmail, setAddEmail] = useState('');
   const [addRole, setAddRole] = useState<'MAINTAINER' | 'CONTRIBUTOR'>('CONTRIBUTOR');
+  const [showRequestForm, setShowRequestForm] = useState(false);
+  const [requestRole, setRequestRole] = useState<'CONTRIBUTOR' | 'MAINTAINER'>('CONTRIBUTOR');
+  const [requestMessage, setRequestMessage] = useState('');
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [success, setSuccess] = useState<string | null>(null);
@@ -81,6 +85,34 @@ export default function PermissionsManager({
       navigator.clipboard.writeText(id);
       setCopiedId(id);
       setTimeout(() => setCopiedId(null), 2000);
+    }
+  };
+
+  const handleRequestAccess = async (e: React.FormEvent) => {
+    e.preventDefault();
+    setLoading(true);
+    setError(null);
+    setSuccess(null);
+
+    try {
+      const res = await requestAccess({
+        resourceId,
+        requestedRole: requestRole,
+        message: requestMessage.trim() || undefined,
+        userId: currentUserId,
+      });
+
+      if (res.success) {
+        setSuccess('Access request submitted successfully! An owner or maintainer will review it.');
+        setShowRequestForm(false);
+        setRequestMessage('');
+      } else {
+        setError(res.error || 'Failed to submit request');
+      }
+    } catch (err: any) {
+      setError(err.message || 'An error occurred');
+    } finally {
+      setLoading(false);
     }
   };
 
@@ -288,7 +320,7 @@ export default function PermissionsManager({
             </p>
           </div>
 
-          {canManageCollaborators && (
+          {canManageCollaborators ? (
             <button
               onClick={() => setShowAddForm(!showAddForm)}
               className="px-4 py-2 rounded-lg bg-emerald-500 hover:bg-emerald-400 text-zinc-950 text-sm font-semibold transition-colors flex items-center gap-2 shadow-sm"
@@ -296,7 +328,15 @@ export default function PermissionsManager({
               <UserPlus className="w-4 h-4" />
               Invite Collaborator
             </button>
-          )}
+          ) : (currentUserRole === 'VIEWER' || (currentUserRole as string) === 'NONE') ? (
+            <button
+              onClick={() => setShowRequestForm(!showRequestForm)}
+              className="px-4 py-2 rounded-lg bg-blue-500 hover:bg-blue-400 text-zinc-950 text-sm font-semibold transition-colors flex items-center gap-2 shadow-sm"
+            >
+              <Shield className="w-4 h-4" />
+              Request Access
+            </button>
+          ) : null}
         </div>
 
         {/* Messages */}
@@ -377,6 +417,75 @@ export default function PermissionsManager({
                   onClick={() => {
                     setShowAddForm(false);
                     setAddEmail('');
+                  }}
+                  className="px-3.5 py-2 rounded-lg bg-zinc-700 hover:bg-zinc-600 text-zinc-200 text-xs font-medium transition-colors"
+                >
+                  Cancel
+                </button>
+              </div>
+            </div>
+          </form>
+        )}
+
+        {/* Request Access Form */}
+        {showRequestForm && (
+          <form onSubmit={handleRequestAccess} className="mt-4 p-4 rounded-xl bg-blue-950/40 border border-blue-800/60 shadow-xl space-y-4">
+            <div className="border-b border-blue-800/50 pb-2">
+              <h3 className="text-sm font-bold text-blue-200 flex items-center gap-2">
+                <Shield className="w-4 h-4 text-blue-400" />
+                Request Access to this {resourceType === 'NOTEBOOK' ? 'Notebook' : 'Note'}
+              </h3>
+              <p className="text-xs text-blue-300/80 mt-0.5">
+                Send a request to the notebook owner/maintainers to join as a collaborator.
+              </p>
+            </div>
+
+            <div className="space-y-3">
+              <div>
+                <label className="block text-xs font-semibold text-zinc-300 mb-1">
+                  Requested Role
+                </label>
+                <select
+                  value={requestRole}
+                  onChange={(e) => setRequestRole(e.target.value as 'MAINTAINER' | 'CONTRIBUTOR')}
+                  className="w-full px-3 py-2 text-xs rounded-lg bg-zinc-900 border border-zinc-700 text-zinc-100 focus:outline-none focus:ring-2 focus:ring-blue-500"
+                >
+                  <option value="CONTRIBUTOR">
+                    Contributor (Create issues & propose block changes via attempt branches)
+                  </option>
+                  <option value="MAINTAINER">
+                    Maintainer (Direct edit rights, review & merge branches, invite contributors)
+                  </option>
+                </select>
+              </div>
+
+              <div>
+                <label className="block text-xs font-semibold text-zinc-300 mb-1">
+                  Message / Context (Optional)
+                </label>
+                <textarea
+                  rows={2}
+                  value={requestMessage}
+                  onChange={(e) => setRequestMessage(e.target.value)}
+                  placeholder="Explain what changes or contributions you plan to make..."
+                  className="w-full px-3 py-2 text-xs rounded-lg bg-zinc-900 border border-zinc-700 text-zinc-100 placeholder-zinc-500 focus:outline-none focus:ring-2 focus:ring-blue-500 resize-none"
+                />
+              </div>
+
+              <div className="flex items-center gap-2 pt-1">
+                <button
+                  type="submit"
+                  disabled={loading}
+                  className="px-4 py-2 rounded-lg bg-blue-500 hover:bg-blue-400 text-zinc-950 text-xs font-bold transition-colors disabled:opacity-50 flex items-center gap-1.5"
+                >
+                  <Shield className="w-3.5 h-3.5" />
+                  <span>{loading ? 'Submitting...' : 'Submit Request'}</span>
+                </button>
+                <button
+                  type="button"
+                  onClick={() => {
+                    setShowRequestForm(false);
+                    setRequestMessage('');
                   }}
                   className="px-3.5 py-2 rounded-lg bg-zinc-700 hover:bg-zinc-600 text-zinc-200 text-xs font-medium transition-colors"
                 >

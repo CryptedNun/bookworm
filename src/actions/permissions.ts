@@ -918,14 +918,8 @@ export async function updateCollaboratorRole(input: {
 /**
  * Get all collaborators for a resource with their details
  */
-export async function getResourceCollaborators(resourceId: string, userId: string) {
+export async function getResourceCollaborators(resourceId: string, userId?: string) {
   try {
-    // Verify user has access to view collaborators
-    const userRole = await getUserRole(resourceId, userId);
-    if (!userRole) {
-      return { success: false, error: 'No access to this resource', collaborators: [] };
-    }
-
     const collaborators = await getCollaborators(resourceId);
 
     return {

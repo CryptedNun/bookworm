@@ -8,6 +8,7 @@
 import { getNoteWithBlocks } from '@/actions/notes';
 import { getCurrentUser } from '@/actions/auth';
 import { getBranches } from '@/actions/branches';
+import { getIssues } from '@/actions/issues';
 import { redirect } from 'next/navigation';
 import { sql } from '@/lib/db';
 import NoteEditor from './editor';
@@ -47,6 +48,10 @@ export default async function NoteEditPage({ params, searchParams }: PageProps) 
   const branchesResult = await getBranches(noteId, false);
   const branches = branchesResult.success ? branchesResult.branches || [] : [];
 
+  // Fetch active issues for block locking visibility
+  const issuesResult = await getIssues(noteId, false);
+  const activeIssues = issuesResult.success ? issuesResult.issues || [] : [];
+
   // Determine current branch
   let currentBranch;
   if (branchId) {
@@ -63,6 +68,7 @@ export default async function NoteEditPage({ params, searchParams }: PageProps) 
       branches={branches as any}
       currentBranch={currentBranch as any}
       userRole={permission.role}
+      activeIssues={activeIssues}
     />
   );
 }

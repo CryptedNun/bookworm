@@ -511,3 +511,68 @@ html.light ::-webkit-scrollbar-thumb {
 html.light ::-webkit-scrollbar-thumb:hover {
   background: rgba(0, 0, 0, 0.32);
 }
+
+/* 14. Dialogs, Modals, Popovers, and Universal Zinc Remapping */
+html.light .bg-zinc-900,
+html.light .bg-zinc-900\/90,
+html.light .bg-zinc-900\/80,
+html.light .bg-zinc-900\/70,
+html.light .bg-zinc-900\/50,
+html.light .bg-zinc-900\/40 {
+  background-color: #ffffff !important;
+}
+
+html.light .bg-zinc-950,
+html.light .bg-zinc-950\/90,
+html.light .bg-zinc-950\/80,
+html.light .bg-zinc-950\/60,
+html.light .bg-zinc-950\/50,
+html.light .bg-zinc-950\/40,
+html.light .bg-zinc-950\/20 {
+  background-color: #f8fafc !important;
+}
+
+html.light .border-zinc-800,
+html.light .border-zinc-800\/90,
+html.light .border-zinc-800\/80,
+html.light .border-zinc-800\/60,
+html.light .border-zinc-800\/50,
+html.light .border-zinc-800\/40,
+html.light .border-zinc-700,
+html.light .border-zinc-700\/80,
+html.light .border-zinc-700\/60,
+html.light .border-zinc-700\/50 {
+  border-color: rgba(0, 0, 0, 0.1) !important;
+}
+
+html.light .bg-amber-950\/20,
+html.light .bg-amber-950\/30,
+html.light .bg-amber-950\/40 {
+  background-color: rgba(254, 243, 199, 0.8) !important;
+  border-color: rgba(245, 158, 11, 0.35) !important;
+}
+
+html.light .bg-blue-950\/20,
+html.light .bg-blue-950\/30,
+html.light .bg-blue-950\/40 {
+  background-color: rgba(239, 246, 255, 0.85) !important;
+  border-color: rgba(59, 130, 246, 0.35) !important;
+}
+
+html.light .bg-purple-950\/20,
+html.light .bg-purple-950\/30,
+html.light .bg-purple-950\/40 {
+  background-color: rgba(250, 245, 255, 0.85) !important;
+  border-color: rgba(168, 85, 247, 0.35) !important;
+}
+
+html.light .bg-red-950\/20,
+html.light .bg-red-950\/30,
+html.light .bg-red-950\/40 {
+  background-color: rgba(254, 242, 242, 0.85) !important;
+  border-color: rgba(239, 68, 68, 0.35) !important;
+}
+
+html.light .shadow-2xl {
+  box-shadow: 0 25px 50px -12px rgba(0, 0, 0, 0.18), 0 0 0 1px rgba(0, 0, 0, 0.08) !important;
+}

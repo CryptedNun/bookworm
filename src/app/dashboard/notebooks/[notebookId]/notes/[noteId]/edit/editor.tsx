@@ -48,6 +48,7 @@ import {
 } from '@dnd-kit/sortable';
 import { CSS } from '@dnd-kit/utilities';
 import { updateBlock, insertBlock, deleteBlock, reorderBlock, splitBlock } from '@/actions/blocks';
+import { contributeToIssue } from '@/actions/issues';
 import type { User } from '@/actions/auth';
 import type { Note } from '@/actions/notes';
 
@@ -90,6 +91,13 @@ interface NoteEditorProps {
     issue_title?: string | null;
   };
   userRole?: string;
+  activeIssues?: Array<{
+    issue_id: string;
+    title: string;
+    target_slot_id: string;
+    status: string;
+    branch_count?: number;
+  }>;
 }
 
 interface SelectionMenuPosition {
@@ -189,8 +197,11 @@ function SortableBlock({
   onTextSelect,
   textareaRef,
   isLocked = false,
+  isLockedByActiveIssue = false,
+  activeIssue = null,
   isTarget = false,
   targetReason,
+  onWorkOnIssue,
 }: {
   block: Block;
   isEditing: boolean;
@@ -205,8 +216,11 @@ function SortableBlock({
   onTextSelect: (slotId: string, selection: { start: number; end: number; text: string }) => void;
   textareaRef: React.RefObject<HTMLTextAreaElement | null>;
   isLocked?: boolean;
+  isLockedByActiveIssue?: boolean;
+  activeIssue?: { issue_id: string; title: string; branch_count?: number } | null;
   isTarget?: boolean;
   targetReason?: string;
+  onWorkOnIssue?: (issueId: string) => void;
 }) {
   const {
     attributes,
@@ -292,7 +306,15 @@ function SortableBlock({
                 </>
               )}
 
-              {isLocked && (
+              {isLockedByActiveIssue ? (
+                <>
+                  <span className="text-xs text-zinc-600">•</span>
+                  <span className="text-[11px] px-2 py-0.5 rounded-full bg-amber-500/20 text-amber-300 font-semibold flex items-center gap-1 border border-amber-500/30">
+                    <Lock className="w-3 h-3 text-amber-400" />
+                    Locked by Active Issue
+                  </span>
+                </>
+              ) : isLocked ? (
                 <>
                   <span className="text-xs text-zinc-600">•</span>
                   <span className="text-[11px] px-2 py-0.5 rounded-full bg-zinc-800 text-zinc-500 flex items-center gap-1">
@@ -300,7 +322,7 @@ function SortableBlock({
                     Read-Only (Scoped to targeted block)
                   </span>
                 </>
-              )}
+              ) : null}
 
               {showSuccess && (
                 <>
@@ -334,12 +356,35 @@ function SortableBlock({
               }}
               disabled={saving || isLocked}
               readOnly={isLocked}
-              placeholder={isLocked ? "This block is read-only on this branch" : "Start typing... (Select text and press Ctrl+/ to split)"}
+              placeholder={isLockedByActiveIssue ? "This block is currently locked by an active issue on main. Propose revisions on an issue branch." : isLocked ? "This block is read-only on this branch" : "Start typing... (Select text and press Ctrl+/ to split)"}
               className={`w-full bg-transparent border-none outline-none resize-none font-mono text-sm leading-relaxed ${
                 isLocked ? 'text-zinc-400 cursor-default' : 'text-zinc-100 placeholder:text-zinc-600'
               } disabled:opacity-75`}
               rows={Math.max(3, editContent.split('\n').length)}
             />
+
+            {/* Locked by Issue Banner with CTA */}
+            {isLockedByActiveIssue && activeIssue && (
+              <div className="mt-3 p-3 rounded-xl bg-amber-950/40 border border-amber-500/40 flex items-center justify-between gap-3 flex-wrap">
+                <div className="flex items-center gap-2 text-amber-300 text-xs">
+                  <Lock className="w-4 h-4 text-amber-400 shrink-0" />
+                  <span>
+                    Locked by issue: <strong className="text-amber-200">"{activeIssue.title}"</strong>
+                  </span>
+                </div>
+                {onWorkOnIssue && (
+                  <button
+                    type="button"
+                    onClick={() => onWorkOnIssue(activeIssue.issue_id)}
+                    className="px-3 py-1.5 rounded-lg bg-amber-500 hover:bg-amber-400 text-zinc-950 font-bold text-xs flex items-center gap-1.5 transition-all shadow-sm cursor-pointer active:scale-95"
+                    title="Open attempt branch to propose changes to this block"
+                  >
+                    <GitBranch className="w-3.5 h-3.5" />
+                    <span>Work on Issue Branch</span>
+                  </button>
+                )}
+              </div>
+            )}
 
             {!isLocked && isEditing && (
               <div className="mt-2 flex items-center gap-2">
@@ -387,7 +432,15 @@ function SortableBlock({
   );
 }
 
-export default function NoteEditor({ note, notebookId, user, branches = [], currentBranch, userRole = 'CONTRIBUTOR' }: NoteEditorProps) {
+export default function NoteEditor({ 
+  note, 
+  notebookId, 
+  user, 
+  branches = [], 
+  currentBranch, 
+  userRole = 'CONTRIBUTOR',
+  activeIssues = [],
+}: NoteEditorProps) {
   const router = useRouter();
   const [blocks, setBlocks] = useState(note.blocks);
   const isAttemptBranch = !!(currentBranch && !currentBranch.is_main);
@@ -668,6 +721,23 @@ export default function NoteEditor({ note, notebookId, user, branches = [], curr
       return updated;
     });
   }, []);
+
+  const handleWorkOnIssue = useCallback(async (issueId: string) => {
+    setSaving(true);
+    setError(null);
+    try {
+      const result = await contributeToIssue(issueId);
+      if (result.success && result.branchId) {
+        router.push(`/dashboard/notebooks/${notebookId}/notes/${note.note_id}/edit?branch=${result.branchId}`);
+      } else {
+        setError(result.error || 'Failed to open branch for this issue');
+      }
+    } catch (err: any) {
+      setError(err.message || 'Error opening branch');
+    } finally {
+      setSaving(false);
+    }
+  }, [notebookId, note.note_id, router]);
 
   const handleInsertBlock = useCallback(async (
     prevSlotId: string | null,
@@ -1089,7 +1159,13 @@ export default function NoteEditor({ note, notebookId, user, branches = [], curr
                     ? editingBlocks[block.slot_id]
                     : block.content_text;
 
-                  const isLocked = isAttemptBranch && targetSlotId ? block.slot_id !== targetSlotId : false;
+                  const activeIssue = !isAttemptBranch
+                    ? activeIssues.find(
+                        (i) => i.target_slot_id === block.slot_id && ['OPEN', 'IN_PROGRESS'].includes(i.status)
+                      )
+                    : null;
+                  const isLockedByActiveIssue = !!activeIssue;
+                  const isLocked = (isAttemptBranch && targetSlotId ? block.slot_id !== targetSlotId : false) || isLockedByActiveIssue;
                   const isTarget = isAttemptBranch && targetSlotId ? block.slot_id === targetSlotId : false;
 
                   // Get or create ref for this block
@@ -1113,8 +1189,11 @@ export default function NoteEditor({ note, notebookId, user, branches = [], curr
                         onTextSelect={handleTextSelect}
                         textareaRef={textareaRefs.current[block.slot_id]}
                         isLocked={isLocked}
+                        isLockedByActiveIssue={isLockedByActiveIssue}
+                        activeIssue={activeIssue}
                         isTarget={isTarget}
                         targetReason={currentBranch?.issue_title || undefined}
+                        onWorkOnIssue={handleWorkOnIssue}
                       />
 
                       {/* Insert after this block (only on main branch) */}

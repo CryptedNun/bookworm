@@ -78,6 +78,21 @@ export async function updateBlock(data: {
           error: 'Only owners and maintainers can edit the main branch directly. Create an issue to propose edits.' 
         };
       }
+
+      // Universal Block Locking: even owners/maintainers cannot edit directly on main when an issue is active!
+      const [activeIssue] = await sql`
+        SELECT issue_id, title FROM issues
+        WHERE target_slot_id = ${data.slotId}
+          AND status IN ('OPEN', 'IN_PROGRESS')
+        LIMIT 1
+      ` as { issue_id: string; title: string }[];
+
+      if (activeIssue) {
+        return {
+          success: false,
+          error: `This block is locked by active issue "${activeIssue.title}". Maintainers and contributors must propose revisions via an issue branch, or resolve the issue before editing directly on main.`,
+        };
+      }
     } else {
       const isAttemptAuthor = branchRecord.attempted_by === user.user_id;
       const isMaintainer = role && ['OWNER', 'MAINTAINER'].includes(role.role_type);
@@ -112,11 +127,12 @@ export async function updateBlock(data: {
       RETURNING version_id
     ` as { version_id: string }[];
 
-    // 3. Get latest commit to copy manifest from (from current branch, or fallback to main)
+    // 3. Get latest commit to copy manifest from (prioritizing commits with valid manifests)
     let [latestCommit] = await sql`
-      SELECT commit_id FROM commits
-      WHERE branch_id = ${branchRecord.branch_id}
-      ORDER BY created_at DESC
+      SELECT c.commit_id FROM commits c
+      WHERE c.branch_id = ${branchRecord.branch_id}
+        AND EXISTS (SELECT 1 FROM commit_manifests cm WHERE cm.commit_id = c.commit_id)
+      ORDER BY c.created_at DESC
       LIMIT 1
     ` as { commit_id: string }[];
 
@@ -126,10 +142,18 @@ export async function updateBlock(data: {
         FROM commits c
         JOIN branches b ON b.branch_id = c.branch_id
         WHERE b.note_id = ${data.noteId} AND b.is_main = TRUE
+          AND EXISTS (SELECT 1 FROM commit_manifests cm WHERE cm.commit_id = c.commit_id)
         ORDER BY c.created_at DESC
         LIMIT 1
       ` as { commit_id: string }[];
       latestCommit = mainCommit;
+    }
+
+    if (!latestCommit) {
+      const [anyCommit] = await sql`
+        SELECT commit_id FROM commits WHERE branch_id = ${branchRecord.branch_id} ORDER BY created_at DESC LIMIT 1
+      ` as { commit_id: string }[];
+      latestCommit = anyCommit;
     }
 
     // Create new commit on the target branch
@@ -173,6 +197,26 @@ export async function updateBlock(data: {
         ON CONFLICT (commit_id, slot_id) DO NOTHING
       `;
     }
+
+    // Always ensure all other slots belonging to this note are preserved in the manifest
+    await sql`
+      INSERT INTO commit_manifests (commit_id, slot_id, version_id)
+      SELECT 
+        ${newCommit.commit_id},
+        lbs.slot_id,
+        latest_v.version_id
+      FROM logical_block_slots lbs
+      JOIN LATERAL (
+        SELECT bvc.version_id
+        FROM block_version_contents bvc
+        WHERE bvc.slot_id = lbs.slot_id
+        ORDER BY bvc.created_at DESC
+        LIMIT 1
+      ) latest_v ON TRUE
+      WHERE lbs.note_id = ${data.noteId}
+        AND lbs.slot_id != ${data.slotId}
+      ON CONFLICT (commit_id, slot_id) DO NOTHING
+    `;
 
     await sql`
       INSERT INTO commit_manifests (commit_id, slot_id, version_id)
@@ -284,13 +328,21 @@ export async function insertBlock(data: {
       LIMIT 1
     ` as { branch_id: string }[];
 
-    // Get latest commit
-    const [latestCommit] = await sql`
-      SELECT commit_id FROM commits
-      WHERE branch_id = ${branch.branch_id}
-      ORDER BY created_at DESC
+    // Get latest commit with manifests
+    let [latestCommit] = await sql`
+      SELECT c.commit_id FROM commits c
+      WHERE c.branch_id = ${branch.branch_id}
+        AND EXISTS (SELECT 1 FROM commit_manifests cm WHERE cm.commit_id = c.commit_id)
+      ORDER BY c.created_at DESC
       LIMIT 1
     ` as { commit_id: string }[];
+
+    if (!latestCommit) {
+      const [anyCommit] = await sql`
+        SELECT commit_id FROM commits WHERE branch_id = ${branch.branch_id} ORDER BY created_at DESC LIMIT 1
+      ` as { commit_id: string }[];
+      latestCommit = anyCommit;
+    }
 
     // Create new commit
     const commitHash = hashContent(JSON.stringify({
@@ -311,7 +363,7 @@ export async function insertBlock(data: {
       )
       VALUES (
         ${branch.branch_id},
-        ${latestCommit.commit_id},
+        ${latestCommit ? latestCommit.commit_id : null},
         ${user.user_id},
         ${'Insert new ' + data.blockType + ' block'},
         ${commitHash}
@@ -320,16 +372,40 @@ export async function insertBlock(data: {
     ` as { commit_id: string }[];
 
     // Copy previous manifest + add new slot
+    if (latestCommit?.commit_id) {
+      await sql`
+        INSERT INTO commit_manifests (commit_id, slot_id, version_id)
+        SELECT ${newCommit.commit_id}, slot_id, version_id
+        FROM commit_manifests
+        WHERE commit_id = ${latestCommit.commit_id}
+        ON CONFLICT (commit_id, slot_id) DO NOTHING
+      `;
+    }
+
+    // Backfill safeguard: preserve all other slots of this note
     await sql`
       INSERT INTO commit_manifests (commit_id, slot_id, version_id)
-      SELECT ${newCommit.commit_id}, slot_id, version_id
-      FROM commit_manifests
-      WHERE commit_id = ${latestCommit.commit_id}
+      SELECT 
+        ${newCommit.commit_id},
+        lbs.slot_id,
+        latest_v.version_id
+      FROM logical_block_slots lbs
+      JOIN LATERAL (
+        SELECT bvc.version_id
+        FROM block_version_contents bvc
+        WHERE bvc.slot_id = lbs.slot_id
+        ORDER BY bvc.created_at DESC
+        LIMIT 1
+      ) latest_v ON TRUE
+      WHERE lbs.note_id = ${data.noteId}
+        AND lbs.slot_id != ${slot.slot_id}
+      ON CONFLICT (commit_id, slot_id) DO NOTHING
     `;
 
     await sql`
       INSERT INTO commit_manifests (commit_id, slot_id, version_id)
       VALUES (${newCommit.commit_id}, ${slot.slot_id}, ${version.version_id})
+      ON CONFLICT (commit_id, slot_id) DO UPDATE SET version_id = EXCLUDED.version_id
     `;
 
     revalidatePath(`/dashboard/notebooks/${data.noteId}`);
@@ -388,6 +464,21 @@ export async function splitBlock(data: {
       return { success: false, error: 'Insufficient permissions' };
     }
 
+    // Universal Block Locking: check if targeted block is locked by an active issue
+    const [activeIssue] = await sql`
+      SELECT issue_id, title FROM issues
+      WHERE target_slot_id = ${data.originalSlotId}
+        AND status IN ('OPEN', 'IN_PROGRESS')
+      LIMIT 1
+    ` as { issue_id: string; title: string }[];
+
+    if (activeIssue) {
+      return {
+        success: false,
+        error: `Cannot split block: it is currently locked by active issue "${activeIssue.title}".`,
+      };
+    }
+
     // Validate selection
     if (data.selectionStart < 0 || data.selectionEnd > data.originalContent.length || data.selectionStart >= data.selectionEnd) {
       return { success: false, error: 'Invalid selection' };
@@ -428,13 +519,21 @@ export async function splitBlock(data: {
       LIMIT 1
     ` as { branch_id: string }[];
 
-    // Get latest commit
-    const [latestCommit] = await sql`
-      SELECT commit_id FROM commits
-      WHERE branch_id = ${branch.branch_id}
-      ORDER BY created_at DESC
+    // Get latest commit with manifests
+    let [latestCommit] = await sql`
+      SELECT c.commit_id FROM commits c
+      WHERE c.branch_id = ${branch.branch_id}
+        AND EXISTS (SELECT 1 FROM commit_manifests cm WHERE cm.commit_id = c.commit_id)
+      ORDER BY c.created_at DESC
       LIMIT 1
     ` as { commit_id: string }[];
+
+    if (!latestCommit) {
+      const [anyCommit] = await sql`
+        SELECT commit_id FROM commits WHERE branch_id = ${branch.branch_id} ORDER BY created_at DESC LIMIT 1
+      ` as { commit_id: string }[];
+      latestCommit = anyCommit;
+    }
 
     const newSlotIds: string[] = [];
 
@@ -535,22 +634,45 @@ export async function splitBlock(data: {
       ` as { commit_id: string }[];
 
       // Update manifest
-      await sql`
-        INSERT INTO commit_manifests (commit_id, slot_id, version_id)
-        SELECT 
-          ${newCommit.commit_id},
-          cm.slot_id,
-          CASE 
-            WHEN cm.slot_id = ${data.originalSlotId} THEN ${remainderVersion.version_id}
-            ELSE cm.version_id
-          END
-        FROM commit_manifests cm
-        WHERE cm.commit_id = ${latestCommit.commit_id}
-      `;
+      if (latestCommit?.commit_id) {
+        await sql`
+          INSERT INTO commit_manifests (commit_id, slot_id, version_id)
+          SELECT 
+            ${newCommit.commit_id},
+            cm.slot_id,
+            CASE 
+              WHEN cm.slot_id = ${data.originalSlotId} THEN ${remainderVersion.version_id}
+              ELSE cm.version_id
+            END
+          FROM commit_manifests cm
+          WHERE cm.commit_id = ${latestCommit.commit_id}
+          ON CONFLICT (commit_id, slot_id) DO NOTHING
+        `;
+      }
 
       await sql`
         INSERT INTO commit_manifests (commit_id, slot_id, version_id)
         VALUES (${newCommit.commit_id}, ${newSlot.slot_id}, ${selectedVersion.version_id})
+        ON CONFLICT (commit_id, slot_id) DO UPDATE SET version_id = EXCLUDED.version_id
+      `;
+
+      // Backfill safeguard: preserve all other slots of this note
+      await sql`
+        INSERT INTO commit_manifests (commit_id, slot_id, version_id)
+        SELECT 
+          ${newCommit.commit_id},
+          lbs.slot_id,
+          latest_v.version_id
+        FROM logical_block_slots lbs
+        JOIN LATERAL (
+          SELECT bvc.version_id
+          FROM block_version_contents bvc
+          WHERE bvc.slot_id = lbs.slot_id
+          ORDER BY bvc.created_at DESC
+          LIMIT 1
+        ) latest_v ON TRUE
+        WHERE lbs.note_id = ${data.noteId}
+        ON CONFLICT (commit_id, slot_id) DO NOTHING
       `;
 
     } else if (isToEnd) {
@@ -618,7 +740,7 @@ export async function splitBlock(data: {
         )
         VALUES (
           ${branch.branch_id},
-          ${latestCommit.commit_id},
+          ${latestCommit ? latestCommit.commit_id : null},
           ${user.user_id},
           'Split block to end',
           ${commitHash}
@@ -627,22 +749,45 @@ export async function splitBlock(data: {
       ` as { commit_id: string }[];
 
       // Update manifest
-      await sql`
-        INSERT INTO commit_manifests (commit_id, slot_id, version_id)
-        SELECT 
-          ${newCommit.commit_id},
-          cm.slot_id,
-          CASE 
-            WHEN cm.slot_id = ${data.originalSlotId} THEN ${prefixVersion.version_id}
-            ELSE cm.version_id
-          END
-        FROM commit_manifests cm
-        WHERE cm.commit_id = ${latestCommit.commit_id}
-      `;
+      if (latestCommit?.commit_id) {
+        await sql`
+          INSERT INTO commit_manifests (commit_id, slot_id, version_id)
+          SELECT 
+            ${newCommit.commit_id},
+            cm.slot_id,
+            CASE 
+              WHEN cm.slot_id = ${data.originalSlotId} THEN ${prefixVersion.version_id}
+              ELSE cm.version_id
+            END
+          FROM commit_manifests cm
+          WHERE cm.commit_id = ${latestCommit.commit_id}
+          ON CONFLICT (commit_id, slot_id) DO NOTHING
+        `;
+      }
 
       await sql`
         INSERT INTO commit_manifests (commit_id, slot_id, version_id)
         VALUES (${newCommit.commit_id}, ${newSlot.slot_id}, ${selectedVersion.version_id})
+        ON CONFLICT (commit_id, slot_id) DO UPDATE SET version_id = EXCLUDED.version_id
+      `;
+
+      // Backfill safeguard: preserve all other slots of this note
+      await sql`
+        INSERT INTO commit_manifests (commit_id, slot_id, version_id)
+        SELECT 
+          ${newCommit.commit_id},
+          lbs.slot_id,
+          latest_v.version_id
+        FROM logical_block_slots lbs
+        JOIN LATERAL (
+          SELECT bvc.version_id
+          FROM block_version_contents bvc
+          WHERE bvc.slot_id = lbs.slot_id
+          ORDER BY bvc.created_at DESC
+          LIMIT 1
+        ) latest_v ON TRUE
+        WHERE lbs.note_id = ${data.noteId}
+        ON CONFLICT (commit_id, slot_id) DO NOTHING
       `;
 
     } else {
@@ -736,7 +881,7 @@ export async function splitBlock(data: {
         )
         VALUES (
           ${branch.branch_id},
-          ${latestCommit.commit_id},
+          ${latestCommit ? latestCommit.commit_id : null},
           ${user.user_id},
           'Split block from middle',
           ${commitHash}
@@ -745,24 +890,47 @@ export async function splitBlock(data: {
       ` as { commit_id: string }[];
 
       // Update manifest
-      await sql`
-        INSERT INTO commit_manifests (commit_id, slot_id, version_id)
-        SELECT 
-          ${newCommit.commit_id},
-          cm.slot_id,
-          CASE 
-            WHEN cm.slot_id = ${data.originalSlotId} THEN ${prefixVersion.version_id}
-            ELSE cm.version_id
-          END
-        FROM commit_manifests cm
-        WHERE cm.commit_id = ${latestCommit.commit_id}
-      `;
+      if (latestCommit?.commit_id) {
+        await sql`
+          INSERT INTO commit_manifests (commit_id, slot_id, version_id)
+          SELECT 
+            ${newCommit.commit_id},
+            cm.slot_id,
+            CASE 
+              WHEN cm.slot_id = ${data.originalSlotId} THEN ${prefixVersion.version_id}
+              ELSE cm.version_id
+            END
+          FROM commit_manifests cm
+          WHERE cm.commit_id = ${latestCommit.commit_id}
+          ON CONFLICT (commit_id, slot_id) DO NOTHING
+        `;
+      }
 
       await sql`
         INSERT INTO commit_manifests (commit_id, slot_id, version_id)
         VALUES 
           (${newCommit.commit_id}, ${firstNewSlot.slot_id}, ${selectedVersion.version_id}),
           (${newCommit.commit_id}, ${secondNewSlot.slot_id}, ${suffixVersion.version_id})
+        ON CONFLICT (commit_id, slot_id) DO UPDATE SET version_id = EXCLUDED.version_id
+      `;
+
+      // Backfill safeguard: preserve all other slots of this note
+      await sql`
+        INSERT INTO commit_manifests (commit_id, slot_id, version_id)
+        SELECT 
+          ${newCommit.commit_id},
+          lbs.slot_id,
+          latest_v.version_id
+        FROM logical_block_slots lbs
+        JOIN LATERAL (
+          SELECT bvc.version_id
+          FROM block_version_contents bvc
+          WHERE bvc.slot_id = lbs.slot_id
+          ORDER BY bvc.created_at DESC
+          LIMIT 1
+        ) latest_v ON TRUE
+        WHERE lbs.note_id = ${data.noteId}
+        ON CONFLICT (commit_id, slot_id) DO NOTHING
       `;
     }
 
@@ -851,13 +1019,21 @@ export async function reorderBlock(data: {
       return { success: false, error: 'Note has no main branch' };
     }
 
-    // Get latest commit
-    const [latestCommit] = await sql`
-      SELECT commit_id FROM commits
-      WHERE branch_id = ${branch.branch_id}
-      ORDER BY created_at DESC
+    // Get latest commit with manifests
+    let [latestCommit] = await sql`
+      SELECT c.commit_id FROM commits c
+      WHERE c.branch_id = ${branch.branch_id}
+        AND EXISTS (SELECT 1 FROM commit_manifests cm WHERE cm.commit_id = c.commit_id)
+      ORDER BY c.created_at DESC
       LIMIT 1
     ` as { commit_id: string }[];
+
+    if (!latestCommit) {
+      const [anyCommit] = await sql`
+        SELECT commit_id FROM commits WHERE branch_id = ${branch.branch_id} ORDER BY created_at DESC LIMIT 1
+      ` as { commit_id: string }[];
+      latestCommit = anyCommit;
+    }
 
     // Create new commit
     const commitHash = hashContent(JSON.stringify({
@@ -879,7 +1055,7 @@ export async function reorderBlock(data: {
       )
       VALUES (
         ${branch.branch_id},
-        ${latestCommit.commit_id},
+        ${latestCommit ? latestCommit.commit_id : null},
         ${user.user_id},
         'Reorder blocks',
         ${commitHash}
@@ -888,11 +1064,33 @@ export async function reorderBlock(data: {
     ` as { commit_id: string }[];
 
     // Copy entire previous manifest (structure changed, not content)
+    if (latestCommit?.commit_id) {
+      await sql`
+        INSERT INTO commit_manifests (commit_id, slot_id, version_id)
+        SELECT ${newCommit.commit_id}, slot_id, version_id
+        FROM commit_manifests
+        WHERE commit_id = ${latestCommit.commit_id}
+        ON CONFLICT (commit_id, slot_id) DO NOTHING
+      `;
+    }
+
+    // Backfill safeguard: preserve all slots of this note
     await sql`
       INSERT INTO commit_manifests (commit_id, slot_id, version_id)
-      SELECT ${newCommit.commit_id}, slot_id, version_id
-      FROM commit_manifests
-      WHERE commit_id = ${latestCommit.commit_id}
+      SELECT 
+        ${newCommit.commit_id},
+        lbs.slot_id,
+        latest_v.version_id
+      FROM logical_block_slots lbs
+      JOIN LATERAL (
+        SELECT bvc.version_id
+        FROM block_version_contents bvc
+        WHERE bvc.slot_id = lbs.slot_id
+        ORDER BY bvc.created_at DESC
+        LIMIT 1
+      ) latest_v ON TRUE
+      WHERE lbs.note_id = ${data.noteId}
+      ON CONFLICT (commit_id, slot_id) DO NOTHING
     `;
 
     revalidatePath(`/dashboard/notebooks/${data.noteId}`);
@@ -932,6 +1130,21 @@ export async function deleteBlock(data: {
       return { success: false, error: 'Insufficient permissions' };
     }
 
+    // Universal Block Locking: check if targeted block is locked by an active issue
+    const [activeIssue] = await sql`
+      SELECT issue_id, title FROM issues
+      WHERE target_slot_id = ${data.slotId}
+        AND status IN ('OPEN', 'IN_PROGRESS')
+      LIMIT 1
+    ` as { issue_id: string; title: string }[];
+
+    if (activeIssue) {
+      return {
+        success: false,
+        error: `Cannot delete block: it is currently locked by active issue "${activeIssue.title}".`,
+      };
+    }
+
     // Get main branch
     const [branch] = await sql`
       SELECT branch_id FROM branches
@@ -940,13 +1153,21 @@ export async function deleteBlock(data: {
       LIMIT 1
     ` as { branch_id: string }[];
 
-    // Get latest commit
-    const [latestCommit] = await sql`
-      SELECT commit_id FROM commits
-      WHERE branch_id = ${branch.branch_id}
-      ORDER BY created_at DESC
+    // Get latest commit with manifests
+    let [latestCommit] = await sql`
+      SELECT c.commit_id FROM commits c
+      WHERE c.branch_id = ${branch.branch_id}
+        AND EXISTS (SELECT 1 FROM commit_manifests cm WHERE cm.commit_id = c.commit_id)
+      ORDER BY c.created_at DESC
       LIMIT 1
     ` as { commit_id: string }[];
+
+    if (!latestCommit) {
+      const [anyCommit] = await sql`
+        SELECT commit_id FROM commits WHERE branch_id = ${branch.branch_id} ORDER BY created_at DESC LIMIT 1
+      ` as { commit_id: string }[];
+      latestCommit = anyCommit;
+    }
 
     // Create new commit
     const commitHash = hashContent(JSON.stringify({
@@ -967,7 +1188,7 @@ export async function deleteBlock(data: {
       )
       VALUES (
         ${branch.branch_id},
-        ${latestCommit.commit_id},
+        ${latestCommit ? latestCommit.commit_id : null},
         ${user.user_id},
         'Delete block',
         ${commitHash}
@@ -976,12 +1197,35 @@ export async function deleteBlock(data: {
     ` as { commit_id: string }[];
 
     // Copy previous manifest EXCLUDING deleted slot
+    if (latestCommit?.commit_id) {
+      await sql`
+        INSERT INTO commit_manifests (commit_id, slot_id, version_id)
+        SELECT ${newCommit.commit_id}, slot_id, version_id
+        FROM commit_manifests
+        WHERE commit_id = ${latestCommit.commit_id}
+          AND slot_id != ${data.slotId}
+        ON CONFLICT (commit_id, slot_id) DO NOTHING
+      `;
+    }
+
+    // Backfill other slots (excluding deleted slot)
     await sql`
       INSERT INTO commit_manifests (commit_id, slot_id, version_id)
-      SELECT ${newCommit.commit_id}, slot_id, version_id
-      FROM commit_manifests
-      WHERE commit_id = ${latestCommit.commit_id}
-      AND slot_id != ${data.slotId}
+      SELECT 
+        ${newCommit.commit_id},
+        lbs.slot_id,
+        latest_v.version_id
+      FROM logical_block_slots lbs
+      JOIN LATERAL (
+        SELECT bvc.version_id
+        FROM block_version_contents bvc
+        WHERE bvc.slot_id = lbs.slot_id
+        ORDER BY bvc.created_at DESC
+        LIMIT 1
+      ) latest_v ON TRUE
+      WHERE lbs.note_id = ${data.noteId}
+        AND lbs.slot_id != ${data.slotId}
+      ON CONFLICT (commit_id, slot_id) DO NOTHING
     `;
 
     revalidatePath(`/dashboard/notebooks/${data.noteId}`);

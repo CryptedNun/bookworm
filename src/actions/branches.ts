@@ -223,22 +223,38 @@ export async function mergeBranch({
         return { success: false, error: 'Main branch not found' };
       }
 
-      // Get latest commits from both branches
-      const [sourceCommit] = await sql`
-        SELECT commit_id, created_at
-        FROM commits
-        WHERE branch_id = ${branchId}
-        ORDER BY created_at DESC
+      // Get latest commits from both branches (prioritizing commits with manifests)
+      let [sourceCommit] = await sql`
+        SELECT c.commit_id, c.created_at
+        FROM commits c
+        WHERE c.branch_id = ${branchId}
+          AND EXISTS (SELECT 1 FROM commit_manifests cm WHERE cm.commit_id = c.commit_id)
+        ORDER BY c.created_at DESC
         LIMIT 1
       `;
 
-      const [mainCommit] = await sql`
-        SELECT commit_id, created_at
-        FROM commits
-        WHERE branch_id = ${mainBranch.branch_id}
-        ORDER BY created_at DESC
+      if (!sourceCommit) {
+        const [anySource] = await sql`
+          SELECT commit_id, created_at FROM commits WHERE branch_id = ${branchId} ORDER BY created_at DESC LIMIT 1
+        `;
+        sourceCommit = anySource;
+      }
+
+      let [mainCommit] = await sql`
+        SELECT c.commit_id, c.created_at
+        FROM commits c
+        WHERE c.branch_id = ${mainBranch.branch_id}
+          AND EXISTS (SELECT 1 FROM commit_manifests cm WHERE cm.commit_id = c.commit_id)
+        ORDER BY c.created_at DESC
         LIMIT 1
       `;
+
+      if (!mainCommit) {
+        const [anyMain] = await sql`
+          SELECT commit_id, created_at FROM commits WHERE branch_id = ${mainBranch.branch_id} ORDER BY created_at DESC LIMIT 1
+        `;
+        mainCommit = anyMain;
+      }
 
       if (!sourceCommit || !mainCommit) {
         return { success: false, error: 'Could not find commits for merge' };
@@ -390,6 +406,30 @@ export async function mergeBranch({
           `;
         }
       }
+
+      // Safeguard: Ensure all active slots for this note are in the merge commit
+      await sql`
+        INSERT INTO commit_manifests (commit_id, slot_id, version_id)
+        SELECT 
+          ${mergeCommit.commit_id} as commit_id,
+          lbs.slot_id,
+          (
+            SELECT cbv.version_id 
+            FROM content_block_versions cbv
+            JOIN commit_manifests prev_cm ON prev_cm.version_id = cbv.version_id
+            WHERE prev_cm.slot_id = lbs.slot_id
+            ORDER BY cbv.created_at DESC
+            LIMIT 1
+          ) as version_id
+        FROM logical_block_slots lbs
+        WHERE lbs.note_id = ${branch.note_id}
+          AND NOT EXISTS (
+            SELECT 1 FROM commit_manifests existing
+            WHERE existing.commit_id = ${mergeCommit.commit_id}
+              AND existing.slot_id = lbs.slot_id
+          )
+        ON CONFLICT (commit_id, slot_id) DO NOTHING
+      `;
 
       // Mark branch as merged
       await sql`

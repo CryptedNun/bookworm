@@ -16,6 +16,8 @@ export interface Notebook {
   created_at: Date;
   role_type: 'OWNER' | 'MAINTAINER' | 'CONTRIBUTOR';
   notes_count: number;
+  stars_count: number;
+  is_starred: boolean;
   owner_username?: string;
   owner_email?: string;
 }
@@ -131,7 +133,9 @@ export async function getNotebooks(userId: string): Promise<Notebook[]> {
           CASE WHEN nb.owner_id = ${userId} THEN 'OWNER' ELSE 'VIEWER' END
         ) as role_type,
         r.created_at,
-        (SELECT COUNT(*) FROM notes n WHERE n.notebook_id = nb.notebook_id AND n.deleted_at IS NULL) as notes_count
+        (SELECT COUNT(*) FROM notes n WHERE n.notebook_id = nb.notebook_id AND n.deleted_at IS NULL) as notes_count,
+        COALESCE((SELECT COUNT(*) FROM user_starred_resources usr WHERE usr.resource_id = nb.notebook_id), 0)::int as stars_count,
+        EXISTS (SELECT 1 FROM user_starred_resources usr WHERE usr.resource_id = nb.notebook_id AND usr.user_id = ${userId}) as is_starred
       FROM notebooks nb
       INNER JOIN resources r ON r.resource_id = nb.notebook_id
       WHERE nb.deleted_at IS NULL
@@ -210,7 +214,9 @@ export async function getNotebook(notebookId: string, userId?: string) {
           CASE WHEN nb.owner_id = ${userId} THEN 'OWNER' ELSE 'VIEWER' END
         ) as role_type,
         u.username as owner_username,
-        u.email as owner_email
+        u.email as owner_email,
+        COALESCE((SELECT COUNT(*) FROM user_starred_resources usr WHERE usr.resource_id = nb.notebook_id), 0)::int as stars_count,
+        EXISTS (SELECT 1 FROM user_starred_resources usr WHERE usr.resource_id = nb.notebook_id AND usr.user_id = ${userId}) as is_starred
       FROM notebooks nb
       INNER JOIN users u ON u.user_id = nb.owner_id
       INNER JOIN resources r ON r.resource_id = nb.notebook_id

@@ -43,7 +43,8 @@ export default async function NotebookManagePage({ params }: PageProps) {
   const collaborators = collaboratorsResult.success ? collaboratorsResult.collaborators : [];
 
   // Fetch pending access requests (only if user is owner/maintainer)
-  const userRole = collaborators.find((c: any) => c.user_id === user.user_id)?.role_type;
+  const isOwner = notebook.owner_id === user.user_id;
+  const userRole = isOwner ? 'OWNER' : (collaborators.find((c: any) => c.user_id === user.user_id)?.role_type || 'VIEWER');
   const canManageAccess = ['OWNER', 'MAINTAINER'].includes(userRole || '');
   
   let accessRequests: any[] = [];
